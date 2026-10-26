@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dotfield</title>
+<meta name="theme-color" content="#f4f5f7">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="/styles.css">
+<script type="module" src="/app.js"></script>
+</head>
+<body>
+<canvas id="field" aria-hidden="true"></canvas>
+
+<div id="skeleton" aria-busy="true" aria-label="読み込み中">
+  <div class="sk-dots"></div>
+  <div class="sk sk-brand"></div>
+  <div class="sk sk-clock"></div>
+  <div class="sk sk-dock">
+    <span></span><span></span><span></span><span></span><span></span>
+    <i></i>
+    <span></span><span></span><span></span><span></span><b></b>
+  </div>
+</div>
+
+<div id="ui">
+  <div class="brand glass" data-enter style="--d:0">
+    <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+    <span class="brand-name">Dotfield</span>
+  </div>
+
+  <div class="clock-chip glass" id="clockChip" data-enter style="--d:1"><span id="clockHM">00:00</span><span id="clockS" class="sec">00</span></div>
+
+  <nav class="dock glass" id="dock" data-enter style="--d:2" aria-label="コントロール">
+    <div class="seg" id="sceneSeg" role="tablist" aria-label="シーン">
+      <span class="seg-ind" aria-hidden="true"></span>
+      <button class="seg-btn" data-v="koi" role="tab" data-tip="Koi · 1" aria-label="Koi">
+        <svg viewBox="0 0 24 24"><path d="M3 12c3-5 9-6 13-3l5-3-1.5 6L21 18l-5-3c-4 3-10 2-13-3z"/><circle cx="8" cy="11" r=".9" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <button class="seg-btn" data-v="wave" role="tab" data-tip="Wave · 2" aria-label="Wave">
+        <svg viewBox="0 0 24 24"><path d="M2 9c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2.2 5-1"/><path d="M2 15c2.5-3 5-3 7.5 0s5 3 7.5 0 3.5-2.2 5-1"/></svg>
+      </button>
+      <button class="seg-btn" data-v="rain" role="tab" data-tip="Rain · 3" aria-label="Rain">
+        <svg viewBox="0 0 24 24"><path d="M7 3v6M12 5v6M17 3v6"/><ellipse cx="12" cy="18" rx="7" ry="2.5"/></svg>
+      </button>
+      <button class="seg-btn" data-v="flow" role="tab" data-tip="Flow · 4" aria-label="Flow">
+        <svg viewBox="0 0 24 24"><path d="M3 7c4 0 5 4 9 4s5-4 9-4"/><path d="M3 13c4 0 5 4 9 4s5-4 9-4"/></svg>
+      </button>
+      <button class="seg-btn" data-v="life" role="tab" data-tip="Life · 5" aria-label="Life">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="4" width="4.5" height="4.5" rx="1"/><rect x="9.75" y="9.75" width="4.5" height="4.5" rx="1"/><rect x="4" y="15.5" width="4.5" height="4.5" rx="1"/><rect x="15.5" y="15.5" width="4.5" height="4.5" rx="1"/></svg>
+      </button>
+    </div>
+    <span class="dock-sep" aria-hidden="true"></span>
+    <button class="icon-btn" id="btnAI" data-tip="AI · A" aria-label="AI テーマ">
+      <svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-5.2 1.8L12 16.5l-1.8-5L5 9.7l5.2-1.8z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></svg>
+    </button>
+    <button class="icon-btn" id="btnSettings" data-tip="設定 · S" aria-label="設定">
+      <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+    </button>
+    <button class="icon-btn" id="btnShare" data-tip="共有" aria-label="共有リンク">
+      <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+    </button>
+    <button class="icon-btn" id="btnFull" data-tip="全画面 · F" aria-label="全画面">
+      <svg viewBox="0 0 24 24" class="ic-enter"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      <svg viewBox="0 0 24 24" class="ic-exit"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+    </button>
+    <button class="play-btn" id="btnPlay" data-tip="開始 · Space" aria-label="スクリーンセーバー開始">
+      <svg viewBox="0 0 24 24"><path d="M8 5.5v13l10.5-6.5z" fill="currentColor"/></svg>
+    </button>
+  </nav>
+
+  <section class="panel glass" id="panelSettings" aria-label="設定" aria-hidden="true">
+    <header class="panel-head">
+      <h2>設定</h2>
+      <button class="close-btn" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="field" style="--i:0">
+      <div class="label">パレット</div>
+      <div class="swatches" id="swatches"></div>
+    </div>
+    <div class="field" style="--i:1">
+      <label class="label" for="cell">ドット<output id="cellOut"></output></label>
+      <input type="range" id="cell" min="10" max="24" step="1">
+    </div>
+    <div class="field" style="--i:2">
+      <label class="label" for="speed">速度<output id="speedOut"></output></label>
+      <input type="range" id="speed" min="0.2" max="2.5" step="0.1">
+    </div>
+    <div class="field" style="--i:3">
+      <div class="label">形状</div>
+      <div class="seg small" id="shapeSeg">
+        <span class="seg-ind" aria-hidden="true"></span>
+        <button class="seg-btn" data-v="square" aria-label="四角"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5" fill="currentColor" stroke="none"/></svg></button>
+        <button class="seg-btn" data-v="circle" aria-label="円"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="currentColor" stroke="none"/></svg></button>
+      </div>
+    </div>
+    <div class="field" style="--i:4">
+      <div class="label">自動起動</div>
+      <div class="seg small" id="idleSeg">
+        <span class="seg-ind" aria-hidden="true"></span>
+        <button class="seg-btn txt" data-v="0">Off</button>
+        <button class="seg-btn txt" data-v="1">1分</button>
+        <button class="seg-btn txt" data-v="3">3分</button>
+        <button class="seg-btn txt" data-v="5">5分</button>
+        <button class="seg-btn txt" data-v="10">10分</button>
+      </div>
+    </div>
+    <div class="field toggles" style="--i:5">
+      <label class="toggle"><span>時計</span><input type="checkbox" id="optClock"><i></i></label>
+      <label class="toggle"><span>全画面で開始</span><input type="checkbox" id="optFull"><i></i></label>
+      <label class="toggle"><span>インタラクション</span><input type="checkbox" id="optInteract"><i></i></label>
+    </div>
+    <div class="field" style="--i:6">
+      <button class="ghost-btn" id="btnReset">リセット</button>
+    </div>
+  </section>
+
+  <section class="panel glass" id="panelAI" aria-label="AI テーマ" aria-hidden="true">
+    <header class="panel-head">
+      <h2>AI テーマ</h2>
+      <button class="close-btn" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <form id="aiForm" class="field ai-form" style="--i:0" autocomplete="off">
+      <input id="aiInput" type="text" maxlength="120" placeholder="夜の桜" aria-label="テーマ">
+      <button type="submit" class="primary-btn" id="aiSubmit"><span>生成</span><i class="spinner" aria-hidden="true"></i></button>
+    </form>
+    <div class="field chips" id="aiChips" style="--i:1">
+      <button type="button" class="chip">深海</button>
+      <button type="button" class="chip">桜</button>
+      <button type="button" class="chip">森の朝</button>
+      <button type="button" class="chip">ネオン</button>
+      <button type="button" class="chip">砂漠の夕暮れ</button>
+    </div>
+    <div class="field ai-result" id="aiResult" style="--i:2"></div>
+  </section>
+
+  <div class="toast glass" id="toast" role="status" aria-live="polite"></div>
+</div>
+</body>
+</html>
