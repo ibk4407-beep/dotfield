@@ -1,4 +1,4 @@
-import { check, parse, SCENE_IDS, CLOCK_STYLES, SURFACES } from "../public/formula.js";
+import { check, parse, SCENE_IDS, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "../public/formula.js";
 
 const SHAPES = ["square", "circle"];
 const STYLES = ["halftone", "dither"];
@@ -114,14 +114,16 @@ function sanitizeConfig(raw) {
     ? { name: String(raw.formula.name || "AI").slice(0, 40), expr: raw.formula.expr.trim(), surface: SURFACES.includes(raw.formula.surface) ? raw.formula.surface : "flat" }
     : null;
   return {
-    scene: SCENE_IDS.includes(raw.scene) ? raw.scene : formula ? "ai" : "globe",
+    scene: SCENE_IDS.includes(raw.scene) ? raw.scene : formula ? "ai" : "torus",
     formula,
     palette: typeof raw.palette === "string" ? raw.palette.slice(0, 24) : "custom",
     name: typeof raw.name === "string" ? raw.name.slice(0, 40) : "",
     colors: sanitizeColors(raw.colors || {}),
     style: STYLES.includes(raw.style) ? raw.style : "halftone",
     shape: SHAPES.includes(raw.shape) ? raw.shape : "circle",
-    clockStyle: CLOCKS.includes(raw.clockStyle) ? raw.clockStyle : "serif",
+    clockStyle: CLOCKS.includes(raw.clockStyle) ? raw.clockStyle : "light",
+    clockPos: CLOCK_POS.includes(raw.clockPos) ? raw.clockPos : "bl",
+    clockSize: CLOCK_SIZES.includes(raw.clockSize) ? raw.clockSize : "m",
     cell: Math.round(num(raw.cell, 10, 24, 14)),
     speed: num(raw.speed, 0.2, 2.5, 1),
     idle: IDLES.includes(+raw.idle) ? +raw.idle : 3,

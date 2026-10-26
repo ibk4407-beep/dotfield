@@ -474,7 +474,6 @@ export class FormulaSurface {
 export const STUDIO = [
   { id: "globe", name: "Globe", make: () => new Globe(), icon: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c3 3.2 3 13.8 0 17M12 3.5c-3 3.2-3 13.8 0 17"/>' },
   { id: "terrain", name: "Terrain", make: () => new Terrain(), icon: '<path d="M2 17l5-6 4 4 3-3 8 5"/><path d="M2 20h20" />' },
-  { id: "torus", name: "Torus", make: () => new Torus(), icon: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><ellipse cx="12" cy="12" rx="3.5" ry="1.8"/>' },
   { id: "galaxy", name: "Galaxy", make: () => new Galaxy(), icon: '<path d="M12 12c3-2 6 0 5 3s-6 4-9 1-1-9 4-10"/><circle cx="12" cy="12" r="1" fill="currentColor"/>' },
   { id: "silk", name: "Silk", make: () => new Silk(), icon: '<path d="M2 9c4-4 8 4 12 0s6-2 8 0"/><path d="M2 15c4-4 8 4 12 0s6-2 8 0"/>' },
   { id: "rings", name: "Rings", make: () => new Rings(), icon: '<circle cx="12" cy="12" r="9" stroke-dasharray="2 2.5"/><circle cx="12" cy="12" r="5.5" stroke-dasharray="4 2"/><circle cx="12" cy="12" r="2"/>' },

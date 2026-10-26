@@ -17,7 +17,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Instrument+Serif:ital@0;1&family=Bebas+Neue&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@200;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Instrument+Serif:ital@0;1&family=Bebas+Neue&display=swap">
 <link rel="stylesheet" href="/styles.css">
 <script type="module" src="/app.js"></script>
 </head>
@@ -80,6 +80,10 @@
       <button class="close-btn" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
     <div class="field" style="--i:0">
+      <div class="label">Objects</div>
+      <div class="scene-grid" id="objectGrid"></div>
+    </div>
+    <div class="field" style="--i:0">
       <div class="label">Studio</div>
       <div class="scene-grid" id="sceneGrid"></div>
     </div>
@@ -137,6 +141,20 @@
     <div class="field" style="--i:5">
       <div class="label">時計</div>
       <div class="clock-grid" id="clockGrid"></div>
+      <div class="two clock-place">
+        <div class="seg small" id="clockPosSeg">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button class="seg-btn txt" data-v="bl">左下</button>
+          <button class="seg-btn txt" data-v="center">中央</button>
+          <button class="seg-btn txt" data-v="br">右下</button>
+        </div>
+        <div class="seg small sizes" id="clockSizeSeg">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button class="seg-btn txt" data-v="s">S</button>
+          <button class="seg-btn txt" data-v="m">M</button>
+          <button class="seg-btn txt" data-v="l">L</button>
+        </div>
+      </div>
     </div>
     <div class="field" style="--i:6">
       <div class="label">自動起動</div>

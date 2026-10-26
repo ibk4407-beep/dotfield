@@ -111,8 +111,11 @@ export class Engine {
     this.style = "halftone";
     this.interact = true;
     this.maxFps = 60;
-    this.clockStyle = "dot";
+    this.clockStyle = "light";
+    this.clockPos = "bl";
+    this.clockSize = "m";
     this.burnin = true;
+    this.clk = null;
     this.ripples = [];
     this.pointer = { x: -999, y: -999, px: -999, py: -999, active: false };
     this.overlayK = 0;
@@ -165,7 +168,7 @@ export class Engine {
     const eff = this.effCell(next);
     const old = this.scene;
     const morph = !instant && old && !old.free && !next.free && eff === this.cell && this.lastData;
-    if (!instant && old && !morph && this.frames > 1) {
+    if (!instant && old && !morph && this.frames > 1 && this.canvas.width > 0 && this.canvas.height > 0) {
       // Different kinds of scenes can't morph dot-by-dot, so cross-fade the last frame instead.
       this.snap.width = this.canvas.width;
       this.snap.height = this.canvas.height;
@@ -234,20 +237,58 @@ export class Engine {
     if (this.scene) this.scene.init(this.A);
   }
 
+  // The clock lives on its own finer dot grid inside a box placed on screen, so it reads as
+  // type rather than as coarse field dots.
   updateMask() {
     const d = new Date();
-    let drift = { x: 0, y: 0 };
+    const { w, h } = this;
+    const pc = Math.max(3.5, this.cellBase * (this.clockSize === "l" ? 0.5 : 0.36));
+    const box = { s: [0.26, 0.16], m: [0.4, 0.24], l: [0.7, 0.44] }[this.clockSize] || [0.4, 0.24];
+    const bw = Math.min(w * box[0], h * box[0] * 1.9), bh = Math.min(h * box[1], bw * 0.62);
+    const mx = w * 0.05, my = h * 0.07;
+    let x0 = this.clockPos === "center" ? (w - bw) / 2 : this.clockPos === "br" ? w - mx - bw : mx;
+    let y0 = this.clockPos === "center" ? (h - bh) / 2 : h - my - bh;
     if (this.burnin) {
-      // Shift the face a little every minute so static pixels don't burn in.
+      // Wander a little every minute so static pixels don't burn in.
       const m = Math.floor(d.getTime() / 60000);
-      drift = { x: Math.round(Math.sin(m * 0.9) * this.cols * 0.12), y: Math.round(Math.cos(m * 1.3) * this.rows * 0.1) };
+      x0 += Math.sin(m * 0.9) * w * 0.03;
+      y0 += Math.cos(m * 1.3) * h * 0.03;
+      x0 = Math.max(4, Math.min(w - bw - 4, x0));
+      y0 = Math.max(4, Math.min(h - bh - 4, y0));
     }
-    const key = `${this.clockStyle}|${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}|${this.cols}x${this.rows}|${drift.x},${drift.y}`;
+    const cols = Math.max(16, Math.round(bw / pc)), rows = Math.max(9, Math.round(bh / pc));
+    const key = `${this.clockStyle}|${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}|${cols}x${rows}|${Math.round(x0)},${Math.round(y0)}`;
     if (key === this.maskKey) return;
     this.maskKey = key;
-    const m = buildClockMask(this.clockStyle, this.cols, this.rows, d, drift);
-    this.mask = m.tone;
-    this.maskA = m.alpha;
+    const m = buildClockMask(this.clockStyle, cols, rows, d, { x: 0, y: 0 });
+    this.clk = { tone: m.tone, alpha: m.alpha, cols, rows, x0, y0, pc };
+  }
+
+  drawClock() {
+    const ok = this.overlayK, C = this.clk;
+    if (ok < 0.005 || !C) return;
+    const { ctx, cur } = this, circle = this.shape === "circle";
+    const { tone, alpha, cols, pc, x0, y0 } = C, half = pc / 2;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    // A soft knockout that follows the glyphs keeps them legible over any scene.
+    ctx.globalAlpha = Math.min(1, ok) * 0.9;
+    ctx.fillStyle = rgbStr(cur.bg);
+    ctx.beginPath();
+    for (let j = 0; j < tone.length; j++) if (tone[j]) ctx.rect(x0 + (j % cols) * pc - 0.5, y0 + ((j / cols) | 0) * pc - 0.5, pc + 1, pc + 1);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    const fills = fillsOf(cur), grow = Math.min(1, ok * 1.3);
+    for (const [m, t] of [[4, T_DIM], [1, T_B], [3, T_A]]) {
+      ctx.fillStyle = rgbStr(fills[t]);
+      ctx.beginPath();
+      for (let j = 0; j < tone.length; j++) {
+        if (tone[j] !== m) continue;
+        const r = (m === 4 ? pc * 0.34 : pc * (0.22 + 0.72 * Math.pow(alpha[j], 0.8))) * grow / 2;
+        const cx = x0 + (j % cols) * pc + half, cy = y0 + ((j / cols) | 0) * pc + half;
+        if (circle) { ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, 6.2832); } else ctx.rect(cx - r, cy - r, r * 2, r * 2);
+      }
+      ctx.fill();
+    }
   }
 
   loop(now) {
@@ -301,13 +342,14 @@ export class Engine {
       this.lastData = data;
     }
 
-    if (this.snapK > 0) {
+    if (this.snapK > 0 && this.snap.width > 0 && this.snap.height > 0) {
       this.ctx.setTransform(1, 0, 0, 1, 0, 0);
       this.ctx.globalAlpha = easeInOut(this.snapK);
       this.ctx.drawImage(this.snap, 0, 0);
       this.ctx.globalAlpha = 1;
       this.snapK = Math.max(0, this.snapK - dt / 0.9);
     }
+    this.drawClock();
     if (this.frames++ === 1) this._ff();
   }
 
@@ -331,28 +373,6 @@ export class Engine {
     }
     drawPointGroups(ctx, P, fillsOf(cur), circle);
 
-    const ok = this.overlayK;
-    if (ok > 0.005 && this.mask) {
-      const mask = this.mask, ma = this.maskA;
-      ctx.globalAlpha = Math.min(1, ok * 1.2);
-      ctx.fillStyle = rgbStr(cur.bg);
-      ctx.beginPath();
-      for (let j = 0; j < mask.length; j++) if (mask[j]) ctx.rect((j % cols) * cell, ((j / cols) | 0) * cell, cell + 0.5, cell + 0.5);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      const fills = fillsOf(cur);
-      for (const [m, tone] of [[4, T_DIM], [1, T_B], [3, T_A]]) {
-        ctx.fillStyle = rgbStr(fills[tone]);
-        ctx.beginPath();
-        for (let j = 0; j < mask.length; j++) {
-          if (mask[j] !== m) continue;
-          const sz = (m === 4 ? cell * 0.36 : cell * (0.2 + 0.7 * Math.pow(ma[j], 0.8))) * Math.min(1, ok * 1.5) / 2;
-          const cx = (j % cols) * cell + half, cy = ((j / cols) | 0) * cell + half;
-          if (circle) { ctx.moveTo(cx + sz, cy); ctx.arc(cx, cy, sz, 0, 6.2832); } else ctx.rect(cx - sz, cy - sz, sz * 2, sz * 2);
-        }
-        ctx.fill();
-      }
-    }
   }
 
   render(d, dt) {
@@ -365,9 +385,6 @@ export class Engine {
 
     const prev = this.trans < 1 ? this.prevData : null;
     const tk = easeInOut(this.trans);
-    const ok = this.overlayK;
-    const mask = ok > 0.005 ? this.mask : null;
-    const ma = this.maskA;
     const rip = this.ripples;
     const P = this.pointer;
     const hov = this.interact && P.active;
@@ -393,21 +410,11 @@ export class Engine {
         }
 
         let tone = -1;
-        if (mask) {
-          const m = mask[j];
-          if (m === 1 || m === 3) {
-            if (ok > 0.5) { tone = m === 1 ? T_B : T_A; a = ma[j]; }
-            else a *= 1 - ok * 2;
-          } else if (m === 2) a *= 1 - 0.95 * ok;
-          else if (m === 4 && ok > 0.5) { tone = T_DIM; a = 0.42; }
-        }
 
         // Breathing: a slow diagonal swell keeps the empty field alive.
         const swell = 0.5 + 0.5 * Math.sin(x * 0.18 + y * 0.12 - t * 0.8);
         let target;
-        if (tone === T_DIM) target = cell * 0.36;
-        else if (tone >= 0) target = cell * (0.2 + 0.7 * Math.pow(a, 0.8));
-        else if (a < 0.05 || (dither && a < TH[j])) { tone = T_BASE; target = baseSize * (0.85 + 0.35 * swell); }
+        if (a < 0.05 || (dither && a < TH[j])) { tone = T_BASE; target = baseSize * (0.85 + 0.35 * swell); }
         else {
           tone = nearestTone(r, g, b, CA, CB, CC);
           target = dither ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8));

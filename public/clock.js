@@ -253,7 +253,30 @@ function typeFace(family, weight, { italic = false, upper = 0.42, secs = true, t
   };
 }
 
+// Three tilted rings seen in perspective, like the Objects scenes: beads mark hours, minutes, seconds.
+function faceOrbit(c, cols, rows, d) {
+  const cxp = cols / 2, cyp = rows * 0.46, R = Math.min(cols * 0.46, rows * 1.15);
+  const h = d.getHours() % 12, m = d.getMinutes(), s = d.getSeconds() + d.getMilliseconds() / 1000;
+  const rings = [[R, 0.3, (h + m / 60) / 12, INK, 2.2], [R * 0.74, 0.34, (m + s / 60) / 60, INK, 1.7], [R * 0.5, 0.38, s / 60, ACC, 1.3]];
+  for (const [r, tilt, f, color, bead] of rings) {
+    const n = Math.max(24, Math.round((Math.PI * 2 * r) / 2.4));
+    c.fillStyle = DIM;
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * TAU;
+      c.fillRect(Math.round(cxp + Math.cos(a) * r - 0.5), Math.round(cyp + Math.sin(a) * r * tilt - 0.5), 1, 1);
+    }
+    const a = f * TAU - Math.PI / 2;
+    const bx = cxp + Math.cos(a) * r, by = cyp + Math.sin(a) * r * tilt;
+    c.fillStyle = color;
+    c.beginPath(); c.arc(bx, by, bead * (0.8 + 0.4 * (Math.sin(a) * 0.5 + 0.5)), 0, TAU); c.fill();
+  }
+  const str = `${pad(d.getHours())}:${pad(m)}`, sc = Math.max(1, Math.floor(rows / 14));
+  bitmap(c, F3, str, Math.round(cxp - (glyphW(F3, str) * sc) / 2), Math.round(rows - 6 * sc), sc, INK);
+}
+
 export const FACES = {
+  light: typeFace('Inter, "Segoe UI", sans-serif', 200, { upper: 0.62, tracking: -0.04 }),
+  orbit: faceOrbit,
   dot: faceDot,
   serif: typeFace('"Instrument Serif", Georgia, serif', 400, { italic: true, upper: 0.5 }),
   grotesk: typeFace('Inter, "Segoe UI", sans-serif', 800, { upper: 0.44, tracking: -0.05 }),
@@ -268,7 +291,7 @@ export const FACES = {
   binary: faceBinary,
   full: faceFull,
 };
-export const FACE_FONTS = ['italic 400 20px "Instrument Serif"', '800 20px Inter', '700 20px "JetBrains Mono"', '400 20px "Bebas Neue"'];
+export const FACE_FONTS = ['200 20px Inter', 'italic 400 20px "Instrument Serif"', '800 20px Inter', '700 20px "JetBrains Mono"', '400 20px "Bebas Neue"'];
 
 export function buildClockMask(style, cols, rows, date, drift) {
   const c = surface(cols, rows);

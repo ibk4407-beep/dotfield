@@ -1,11 +1,12 @@
 import { Engine, drawDots, drawFree, hexToRgb } from "./engine.js";
 import { CATALOG as CLASSIC, AI_ICON, Formula } from "./scenes.js";
 import { STUDIO, FormulaSurface } from "./scenes3d.js";
-import { compile, CLOCK_STYLES, SURFACES } from "./formula.js";
+import { OBJECTS } from "./objects.js";
+import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
 
-const CATALOG = [...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
-const CLOCK_LABELS = { dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
+const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CLOCK_LABELS = { light: "Light", orbit: "Orbit", dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
   graphite: { name: "Graphite", bg: "#f3f3f1", base: "#dcdcd8", a: "#ff4f1a", b: "#1c1c1e", c: "#a3a3a0" },
@@ -22,8 +23,8 @@ const IDLES = [0, 1, 3, 5, 10];
 const CLOCKS = [...CLOCK_STYLES, "off"];
 const STORE_KEY = "dotfield:v1";
 const DEFAULTS = {
-  scene: "globe", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
-  theme: "auto", style: "halftone", shape: "circle", clockStyle: "serif",
+  scene: "torus", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
+  theme: "auto", style: "halftone", shape: "circle", clockStyle: "light", clockPos: "bl", clockSize: "m",
   cell: 14, speed: 1, idle: 3, full: true, interact: true,
   wake: true, burnin: true, eco: false, customScenes: [],
 };
@@ -86,7 +87,9 @@ function normalize(s) {
   if (!["auto", "light", "dark"].includes(n.theme)) n.theme = "auto";
   if (!["halftone", "dither"].includes(n.style)) n.style = "halftone";
   if (!["square", "circle"].includes(n.shape)) n.shape = "circle";
-  if (!CLOCKS.includes(n.clockStyle)) n.clockStyle = s && s.clock === false ? "off" : "dot";
+  if (!CLOCKS.includes(n.clockStyle)) n.clockStyle = s && s.clock === false ? "off" : DEFAULTS.clockStyle;
+  if (!CLOCK_POS.includes(n.clockPos)) n.clockPos = DEFAULTS.clockPos;
+  if (!CLOCK_SIZES.includes(n.clockSize)) n.clockSize = DEFAULTS.clockSize;
   n.cell = Math.min(24, Math.max(10, Math.round(+n.cell) || 14));
   n.speed = Math.min(2.5, Math.max(0.2, +n.speed || 1));
   n.idle = IDLES.includes(+n.idle) ? +n.idle : 3;
@@ -134,7 +137,9 @@ function apply({ instant = false } = {}) {
   engine.interact = state.interact && !DISPLAY;
   engine.maxFps = state.eco ? 30 : 60;
   engine.burnin = state.burnin;
-  engine.clockStyle = state.clockStyle === "off" ? "dot" : state.clockStyle;
+  engine.clockStyle = state.clockStyle === "off" ? "light" : state.clockStyle;
+  engine.clockPos = state.clockPos;
+  engine.clockSize = state.clockSize;
   engine.setOverlay(saver && state.clockStyle !== "off");
   const entry = sceneEntry();
   const key = entry.id + (entry.expr || "");
@@ -198,6 +203,7 @@ const bindSeg = (seg, onPick) => seg.addEventListener("click", (e) => {
   if (b) onPick(b.dataset.v);
 });
 
+const clockPosSeg = $("#clockPosSeg"), clockSizeSeg = $("#clockSizeSeg");
 const themeSeg = $("#themeSeg"), styleSeg = $("#styleSeg"), shapeSeg = $("#shapeSeg"), idleSeg = $("#idleSeg");
 const cellIn = $("#cell"), speedIn = $("#speed");
 const setRangeFill = (el) => el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
@@ -207,6 +213,8 @@ function syncControls() {
   moveSeg(styleSeg, state.style);
   moveSeg(shapeSeg, state.shape);
   moveSeg(idleSeg, state.idle);
+  moveSeg(clockPosSeg, state.clockPos);
+  moveSeg(clockSizeSeg, state.clockSize);
   cellIn.value = state.cell;
   speedIn.value = state.speed;
   setRangeFill(cellIn);
@@ -227,6 +235,8 @@ bindSeg(themeSeg, (v) => update({ theme: v }));
 bindSeg(styleSeg, (v) => update({ style: v }));
 bindSeg(shapeSeg, (v) => update({ shape: v }));
 bindSeg(idleSeg, (v) => update({ idle: +v }));
+bindSeg(clockPosSeg, (v) => { update({ clockPos: v }); previewClock(); });
+bindSeg(clockSizeSeg, (v) => { update({ clockSize: v }); previewClock(); });
 
 let customColors = null;
 function renderSwatches() {
@@ -319,7 +329,7 @@ function addThumb(canvas, make) {
   canvas.height = rows * cell;
   const low = document.createElement("canvas");
   low.width = cols; low.height = rows;
-  const A = { cols, rows, w: canvas.width, h: canvas.height, cell: Math.max(2.2, canvas.width / 115), t: Math.random() * 10, pal: engine.A.pal, rgb: engine.A.rgb, pointer: { x: -99, y: -99, px: -99, py: -99, active: false }, ripples: [] };
+  const A = { thumb: true, cols, rows, w: canvas.width, h: canvas.height, cell: Math.max(2.6, canvas.width / 80), t: Math.random() * 10, pal: engine.A.pal, rgb: engine.A.rgb, pointer: { x: -99, y: -99, px: -99, py: -99, active: false }, ripples: [] };
   let scene;
   try { scene = make(); scene.init(A); } catch { return; }
   thumbs.set(canvas, { scene, A, low, lctx: low.getContext("2d", { willReadFrequently: true }), ctx: canvas.getContext("2d"), cell });
@@ -329,11 +339,21 @@ function clearThumbs(filter = () => true) {
   for (const k of [...thumbs.keys()]) if (filter(k)) thumbs.delete(k);
   if (!thumbs.size && thumbTimer) { clearInterval(thumbTimer); thumbTimer = 0; }
 }
+// Only previews in view are drawn, round-robin within a small time budget, so a panel full of
+// 3D thumbnails never starves the main field.
+let thumbCursor = 0;
 function tickThumbs() {
-  const now = performance.now(), dt = Math.min(0.08, (now - thumbLast) / 1000) * state.speed;
+  const now = performance.now();
   thumbLast = now;
-  for (const [canvas, th] of thumbs) {
+  const list = [...thumbs];
+  let n = 0;
+  for (; n < list.length && performance.now() - now < 10; n++) {
+    const [canvas, th] = list[(thumbCursor + n) % list.length];
     if (!canvas.isConnected) { thumbs.delete(canvas); continue; }
+    const r = canvas.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight || !r.width) continue;
+    const dt = Math.min(0.25, (now - (th.last || now)) / 1000) * state.speed;
+    th.last = now;
     th.A.t += dt;
     if (th.scene.free) {
       th.scene.update(dt, th.A);
@@ -345,6 +365,8 @@ function tickThumbs() {
     th.scene.draw(th.lctx, th.A);
     drawDots(th.ctx, th.lctx.getImageData(0, 0, th.A.cols, th.A.rows).data, th.A.cols, th.A.rows, th.cell, engine.A.rgb, state.shape, state.style);
   }
+  // Pick up next tick where this one ran out of time.
+  thumbCursor = list.length ? (thumbCursor + n) % list.length : 0;
 }
 
 /* ---------- Scene panel ---------- */
@@ -358,7 +380,8 @@ function card(entry, i, deletable) {
 function renderSceneGrids() {
   if (!panels.scenes.classList.contains("open")) return;
   clearThumbs((c) => c.closest("#panelScenes"));
-  sceneGrid.innerHTML = CATALOG.filter((e) => e.group === "studio").map((e, i) => card(e, i, false)).join("");
+  $("#objectGrid").innerHTML = CATALOG.filter((e) => e.group === "objects").map((e, i) => card(e, i, false)).join("");
+  sceneGrid.innerHTML = CATALOG.filter((e) => e.group === "studio").map((e, i) => card(e, i + 10, false).replace(/<small>\d*<\/small>/, "<small></small>")).join("");
   $("#classicGrid").innerHTML = CATALOG.filter((e) => e.group === "classic").map((e, i) => card(e, i + 20, false).replace(/<small>\d*<\/small>/, "<small></small>")).join("");
   const custom = state.customScenes.map((c) => sceneEntry(c.id));
   $("#aiScenesField").hidden = !custom.length;

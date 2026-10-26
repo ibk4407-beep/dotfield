@@ -2,11 +2,14 @@
 // Only numbers, whitelisted variables/functions and operators exist, so a formula can't reach the page.
 
 export const SCENE_IDS = [
-  "globe", "terrain", "torus", "galaxy", "silk", "rings", "moon", "aura", "helix", "harmono",
+  "torus", "knot", "mobius", "twist", "gyro", "coil", "blob", "shell", "orb", "morph",
+  "globe", "terrain", "galaxy", "silk", "rings", "moon", "aura", "helix", "harmono",
   "koi", "wave", "rain", "flow", "life", "stars", "matrix", "fireworks", "boids", "snow",
   "plasma", "tunnel", "spiral", "pulse", "kaleido", "cloud",
 ];
-export const CLOCK_STYLES = ["dot", "serif", "grotesk", "mono", "condensed", "seg", "analog", "railway", "ring", "word", "progress", "binary", "full"];
+export const CLOCK_STYLES = ["light", "serif", "grotesk", "condensed", "mono", "orbit", "analog", "railway", "ring", "seg", "dot", "word", "progress", "binary", "full"];
+export const CLOCK_POS = ["bl", "br", "center"];
+export const CLOCK_SIZES = ["s", "m", "l"];
 export const SURFACES = ["flat", "sphere", "terrain"];
 
 const VARS = ["x", "y", "u", "v", "r", "a", "t", "i", "w", "h", "mx", "my"];
