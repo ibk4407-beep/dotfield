@@ -66,7 +66,70 @@ const SHAPES = {
     return [2 * (1 - e1) * Math.cos(a) * c2, 1 - Math.exp(a / (3 * Math.PI)) - Math.sin(b) + e1 * Math.sin(b), 2 * (e1 - 1) * Math.sin(a) * c2];
   }, open: true },
   orb: { sphere: 6000, scale: 0.34, f: (d) => 1 + 0.025 * Math.sin(Math.asin(clamp(d[1], -1, 1)) * 26) },
+  // Two interlocked rings.
+  chain: { U: 300, V: 24, scale: 0.27, twoSided: true, f: parts([
+    tube((s) => { const a = s * TAU; return [Math.cos(a) * 0.82 - 0.42, Math.sin(a) * 0.82, 0]; }, 0.2),
+    tube((s) => { const a = s * TAU; return [Math.cos(a) * 0.82 + 0.42, 0, Math.sin(a) * 0.82]; }, 0.2),
+  ]), accent: (u) => Math.abs(u - 0.75) < 0.006 },
+  // Borromean rings: no two are linked, yet the three hold together.
+  borromean: { U: 450, V: 14, scale: 0.3, twoSided: true, f: parts([
+    tube((s) => { const a = s * TAU; return [Math.cos(a), Math.sin(a) * 0.52, 0]; }, 0.1),
+    tube((s) => { const a = s * TAU; return [0, Math.cos(a), Math.sin(a) * 0.52]; }, 0.1),
+    tube((s) => { const a = s * TAU; return [Math.sin(a) * 0.52, 0, Math.cos(a)]; }, 0.1),
+  ]), accent: (u) => u > 2 / 3 && Math.abs(u - 5 / 6) < 0.004 },
+  // A horn/spindle torus: the tube is fatter than the hole, so it folds through itself.
+  horn: { U: 150, V: 50, scale: 0.3, f: (u, v) => {
+    const a = u * TAU, b = v * TAU, R = 0.55, r = 0.62;
+    return [(R + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (R + r * Math.cos(b)) * Math.sin(a)];
+  }, twoSided: true },
+  // Cinquefoil: the (2, 5) torus knot.
+  star: { U: 520, V: 14, scale: 0.23, f: tube((s) => {
+    const a = s * TAU;
+    return [(2.3 + Math.cos(5 * a)) * Math.cos(2 * a) * 0.36, Math.sin(5 * a) * 0.36, (2.3 + Math.cos(5 * a)) * Math.sin(2 * a) * 0.36];
+  }, 0.12), accent: (u, v, t) => Math.abs(((u - t * 0.04) % 1 + 1) % 1 - 0.5) < 0.004 },
+  // A fine (3, 8) torus knot winding around an invisible torus.
+  wind: { U: 900, V: 8, scale: 0.25, f: tube((s) => {
+    const a = s * TAU;
+    return [(1 + 0.42 * Math.cos(8 * a)) * Math.cos(3 * a), 0.42 * Math.sin(8 * a), (1 + 0.42 * Math.cos(8 * a)) * Math.sin(3 * a)];
+  }, 0.055) },
+  // A slinky bent into a ring.
+  slinky: { U: 1300, V: 9, scale: 0.25, f: tube((s) => {
+    const a = s * TAU;
+    return [(1 + 0.34 * Math.cos(26 * a)) * Math.cos(a), 0.34 * Math.sin(26 * a), (1 + 0.34 * Math.cos(26 * a)) * Math.sin(a)];
+  }, 0.045), accent: (u, v, t) => Math.abs(((u - t * 0.03) % 1 + 1) % 1 - 0.5) < 0.0025 },
+  // The figure-8 immersion of a Klein bottle.
+  klein: { U: 160, V: 42, scale: 0.36, normalize: true, twoSided: true, f: (u, v) => {
+    const a = u * TAU, b = v * TAU, R = 2.2;
+    const w = R + Math.cos(a / 2) * Math.sin(b) - Math.sin(a / 2) * Math.sin(2 * b);
+    return [w * Math.cos(a), Math.sin(a / 2) * Math.sin(b) + Math.cos(a / 2) * Math.sin(2 * b), w * Math.sin(a)];
+  }},
+  // A bracelet of pearls, one of them in the accent.
+  pearls: { U: 18 * 14, V: 18, scale: 0.28, twoSided: true, f: (u, v) => {
+    const n = 18, k = Math.min(n - 1, Math.floor(u * n)), uu = u * n - k;
+    const c = (k / n) * TAU, lon = uu * TAU, lat = (v - 0.5) * Math.PI, r = 0.17;
+    return [Math.cos(c) + r * Math.cos(lat) * Math.cos(lon), r * Math.sin(lat), Math.sin(c) + r * Math.cos(lat) * Math.sin(lon)];
+  }, accent: (u) => Math.floor(u * 18) === 5 },
+  // A flat band with three half twists.
+  ribbon: { U: 300, V: 14, scale: 0.3, twoSided: true, f: (u, v) => {
+    const a = u * TAU, w = (v - 0.5) * 0.62, th = 1.5 * a;
+    const rx = Math.cos(a), rz = Math.sin(a);
+    return [rx + w * Math.cos(th) * rx, w * Math.sin(th), rz + w * Math.cos(th) * rz];
+  }, accent: (u, v) => Math.abs(v - 0.5) < 0.04 && Math.abs(u - 0.25) < 0.02 },
+  // A torus whose surface carries a travelling wave.
+  ripple: { U: 150, V: 44, scale: 0.24, animated: true, f: (u, v, t) => {
+    const a = u * TAU, b = v * TAU;
+    const r = 0.4 * (1 + 0.14 * Math.sin(6 * a - t * 2.2) * (0.6 + 0.4 * Math.cos(b)));
+    return [(1 + r * Math.cos(b)) * Math.cos(a), r * Math.sin(b), (1 + r * Math.cos(b)) * Math.sin(a)];
+  }},
 };
+
+// Several closed pieces sharing one u range (u is split evenly between them).
+function parts(fns) {
+  return (u, v, t) => {
+    const k = Math.min(fns.length - 1, Math.floor(u * fns.length));
+    return fns[k](u * fns.length - k, v, t);
+  };
+}
 
 function fibSphere(n) {
   const out = [], g = Math.PI * (3 - Math.sqrt(5));
@@ -169,7 +232,7 @@ class ObjectScene {
 }
 
 // Morph: flows from one object into the next, point by point.
-const MORPH_ORDER = ["torus", "orb", "knot", "twist", "mobius", "blob"];
+const MORPH_ORDER = ["torus", "orb", "knot", "ribbon", "star", "mobius", "blob", "klein"];
 class Morph {
   constructor() { this.free = true; this.P = new Points(8192); }
   init() {
@@ -218,8 +281,21 @@ const ICONS = {
   shell: '<path d="M12 12a2 2 0 1 1 2 2 4 4 0 1 1-4-4 6 6 0 1 1 6 6"/>',
   orb: '<circle cx="12" cy="12" r="8.5"/><path d="M4 9h16M3.5 12h17M4 15h16"/>',
   morph: '<circle cx="8" cy="12" r="4.5"/><rect x="13" y="7.5" width="8" height="9" rx="2"/>',
+  chain: '<ellipse cx="8.5" cy="12" rx="5.5" ry="4"/><ellipse cx="15.5" cy="12" rx="5.5" ry="4"/>',
+  borromean: '<circle cx="12" cy="8.5" r="4.5"/><circle cx="8.5" cy="14.5" r="4.5"/><circle cx="15.5" cy="14.5" r="4.5"/>',
+  horn: '<ellipse cx="12" cy="12" rx="9" ry="6"/><path d="M12 6v12"/>',
+  star: '<path d="M12 3l2.6 6 6.4.6-4.9 4.2 1.5 6.2L12 16.8 6.4 20l1.5-6.2L3 9.6 9.4 9z"/>',
+  wind: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M4 10c3 3 5-4 8 0s5-3 8 0" />',
+  slinky: '<ellipse cx="12" cy="12" rx="9" ry="5.5" stroke-dasharray="1.2 1.6"/>',
+  klein: '<path d="M7 18c-3-3-2-11 4-12s8 4 6 8-7 3-6-1 4-3 5 0"/>',
+  pearls: '<circle cx="12" cy="4.5" r="1.6"/><circle cx="19" cy="9" r="1.6"/><circle cx="17" cy="17" r="1.6"/><circle cx="7" cy="17" r="1.6"/><circle cx="5" cy="9" r="1.6"/>',
+  ribbon: '<path d="M3 12c3-6 6 6 9 0s6 6 9 0"/><path d="M3 14c3-6 6 6 9 0s6 6 9 0" opacity=".5"/>',
+  ripple: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M5 12c1.5-1 2.5 1 4 0s2.5 1 4 0 2.5 1 4 0 1.5 1 2 0"/>',
 };
-const NAMES = { torus: "Torus", knot: "Knot", mobius: "Möbius", twist: "Twist", gyro: "Gyro", coil: "Coil", blob: "Blob", shell: "Shell", orb: "Orb" };
+const NAMES = {
+  torus: "Torus", knot: "Knot", mobius: "Möbius", twist: "Twist", gyro: "Gyro", coil: "Coil", blob: "Blob", shell: "Shell", orb: "Orb",
+  chain: "Chain", borromean: "Borromean", horn: "Horn", star: "Star", wind: "Wind", slinky: "Slinky", klein: "Klein", pearls: "Pearls", ribbon: "Ribbon", ripple: "Ripple",
+};
 
 export const OBJECTS = [
   ...Object.keys(NAMES).map((k) => ({ id: k, name: NAMES[k], icon: ICONS[k], make: () => new ObjectScene(k) })),

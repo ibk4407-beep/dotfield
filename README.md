@@ -6,8 +6,8 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 35 シーン
-  - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Morph（陰影つきの 3D 立体をドットで描画）
+- 常駐ドットフィールド 45 シーン
+  - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
   - Studio: Globe / Terrain / Galaxy / Silk / Rings / Moon / Aura / Helix / Harmono（3D に配置したドット、細かいピッチのハーフトーン、隠線処理）
   - Classic: Koi / Swell / Rain / Flow / Life ほか 16 種（各ドットはパレットの 4 色にスナップ、スプリングで反応）
 - レンダリング: ハーフトーン（サイズ）/ ディザ（1-bit）、円 / 四角

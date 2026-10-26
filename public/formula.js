@@ -3,6 +3,7 @@
 
 export const SCENE_IDS = [
   "torus", "knot", "mobius", "twist", "gyro", "coil", "blob", "shell", "orb", "morph",
+  "chain", "borromean", "horn", "star", "wind", "slinky", "klein", "pearls", "ribbon", "ripple",
   "globe", "terrain", "galaxy", "silk", "rings", "moon", "aura", "helix", "harmono",
   "koi", "wave", "rain", "flow", "life", "stars", "matrix", "fireworks", "boids", "snow",
   "plasma", "tunnel", "spiral", "pulse", "kaleido", "cloud",
