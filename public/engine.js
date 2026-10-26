@@ -1,5 +1,6 @@
-// Dot-matrix renderer. Each scene paints into a tiny canvas (one pixel per dot),
-// and the engine turns those pixels into dots sized by alpha and tinted by color.
+// Dot-matrix renderer. Scenes paint into a tiny canvas (one pixel per dot); the engine
+// snaps each pixel to a palette tone, eases dot sizes, and moves dots on springs.
+import { buildClockMask } from "./clock.js";
 
 export const hexToRgb = (h) => {
   h = h.replace("#", "");
@@ -9,24 +10,44 @@ export const hexToRgb = (h) => {
 };
 const rgbStr = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-
-// 5x7 glyphs for the screensaver clock.
-const FONT = {
-  0: ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
-  1: ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
-  2: ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
-  3: ["11110", "00001", "00001", "01110", "00001", "00001", "11110"],
-  4: ["00010", "00110", "01010", "10010", "11111", "00010", "00010"],
-  5: ["11111", "10000", "11110", "00001", "00001", "10001", "01110"],
-  6: ["00110", "01000", "10000", "11110", "10001", "10001", "01110"],
-  7: ["11111", "00001", "00010", "00100", "01000", "01000", "01000"],
-  8: ["01110", "10001", "10001", "01110", "10001", "10001", "01110"],
-  9: ["01110", "10001", "10001", "01111", "00001", "00010", "01100"],
-  ":": ["0", "1", "0", "0", "0", "1", "0"],
-  " ": ["0", "0", "0", "0", "0", "0", "0"],
-};
+// Interleaved gradient noise: an even, blue-noise-like threshold for 1-bit dithering.
+const ign = (x, y) => { const v = 0.06711056 * x + 0.00583715 * y; return (52.9829189 * (v - Math.floor(v))) % 1; };
 
 const KEYS = ["bg", "base", "a", "b", "c"];
+// Tone groups, drawn back to front.
+const T_BASE = 0, T_DIM = 1, T_C = 2, T_A = 3, T_B = 4;
+
+export function nearestTone(r, g, b, A, B, C) {
+  const da = (r - A[0]) ** 2 + (g - A[1]) ** 2 + (b - A[2]) ** 2;
+  const db = (r - B[0]) ** 2 + (g - B[1]) ** 2 + (b - B[2]) ** 2;
+  const dc = (r - C[0]) ** 2 + (g - C[1]) ** 2 + (b - C[2]) ** 2;
+  return da <= db && da <= dc ? T_A : db <= dc ? T_B : T_C;
+}
+
+// Stateless dot drawing for small previews.
+export function drawDots(ctx, d, cols, rows, cell, rgb, shape, style) {
+  ctx.fillStyle = rgbStr(rgb.bg);
+  ctx.fillRect(0, 0, cols * cell, rows * cell);
+  const groups = [[], [], [], [], []];
+  const sizes = new Float32Array(cols * rows);
+  for (let j = 0; j < cols * rows; j++) {
+    const i = j * 4, a = d[i + 3] / 255;
+    const x = j % cols, y = (j / cols) | 0;
+    if (a < 0.05 || (style === "dither" && a < ign(x, y))) { sizes[j] = cell * 0.14; groups[T_BASE].push(j); continue; }
+    sizes[j] = style === "dither" ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8));
+    groups[nearestTone(d[i], d[i + 1], d[i + 2], rgb.a, rgb.b, rgb.c)].push(j);
+  }
+  const fills = [rgb.base, rgb.base, rgb.c, rgb.a, rgb.b];
+  for (let gI = 0; gI < 5; gI++) {
+    ctx.fillStyle = rgbStr(fills[gI]);
+    ctx.beginPath();
+    for (const j of groups[gI]) {
+      const x = (j % cols) * cell + cell / 2, y = ((j / cols) | 0) * cell + cell / 2, h = sizes[j] / 2;
+      if (shape === "circle") { ctx.moveTo(x + h, y); ctx.arc(x, y, h, 0, 6.2832); } else ctx.rect(x - h, y - h, h * 2, h * 2);
+    }
+    ctx.fill();
+  }
+}
 
 export class Engine {
   constructor(canvas) {
@@ -36,8 +57,12 @@ export class Engine {
     this.lctx = this.low.getContext("2d", { willReadFrequently: true });
     this.cell = 14;
     this.speed = 1;
-    this.shape = "square";
+    this.shape = "circle";
+    this.style = "halftone";
     this.interact = true;
+    this.maxFps = 60;
+    this.clockStyle = "dot";
+    this.burnin = true;
     this.ripples = [];
     this.pointer = { x: -999, y: -999, active: false };
     this.overlayK = 0;
@@ -52,13 +77,12 @@ export class Engine {
     this.frames = 0;
     this.cur = null;
     this.target = null;
-    this.colorStrs = new Map();
-    this.buckets = new Map();
     this.A = { cols: 0, rows: 0, t: 0, pal: {}, rgb: {}, pointer: this.pointer, ripples: this.ripples };
     this.firstFrame = new Promise((r) => (this._ff = r));
     addEventListener("resize", () => this.resize());
     this.resize();
     this.last = performance.now();
+    this.lastDraw = 0;
     this.loop = this.loop.bind(this);
     requestAnimationFrame(this.loop);
     // Some embedded or occluded views pause rAF while still visible; keep drawing at a low rate.
@@ -93,11 +117,12 @@ export class Engine {
 
   setOverlay(on) {
     this.overlayTarget = on ? 1 : 0;
+    this.maskKey = "";
   }
 
   addRipple(px, py, amp = 1) {
-    if (this.ripples.length > 10) this.ripples.shift();
-    this.ripples.push({ x: px / this.cell, y: py / this.cell, r: 0, w: 1.6, amp, life: 1, age: 0, dur: 1.6 + amp * 0.8 });
+    if (this.ripples.length > 8) this.ripples.shift();
+    this.ripples.push({ x: px / this.cell, y: py / this.cell, r: 0, w: 1.4, amp, life: 1, age: 0, dur: 1.2 + amp * 0.6 });
   }
 
   setPointer(px, py, active) {
@@ -120,12 +145,15 @@ export class Engine {
     this.cols = cols; this.rows = rows;
     this.low.width = cols; this.low.height = rows;
     this.A.cols = cols; this.A.rows = rows;
-    this.ax = new Float32Array(cols);
-    this.ay = new Float32Array(rows);
     const n = cols * rows;
-    this.px = new Float32Array(n);
-    this.py = new Float32Array(n);
-    this.ps = new Float32Array(n);
+    this.S = new Float32Array(n).fill(this.cell * 0.14);
+    this.OX = new Float32Array(n);
+    this.OY = new Float32Array(n);
+    this.VX = new Float32Array(n);
+    this.VY = new Float32Array(n);
+    this.TH = new Float32Array(n);
+    for (let j = 0; j < n; j++) this.TH[j] = ign(j % cols, (j / cols) | 0);
+    this.groups = Array.from({ length: 5 }, () => new Int32Array(n));
     this.prevData = null;
     this.lastData = null;
     this.trans = 1;
@@ -133,64 +161,34 @@ export class Engine {
     if (this.scene) this.scene.init(this.A);
   }
 
-  buildMask() {
+  updateMask() {
     const d = new Date();
-    const blink = d.getSeconds() % 2 === 0;
-    const str = `${String(d.getHours()).padStart(2, "0")}${blink ? ":" : " "}${String(d.getMinutes()).padStart(2, "0")}`;
-    const key = `${str}|${this.cols}x${this.rows}`;
+    let drift = { x: 0, y: 0 };
+    if (this.burnin) {
+      // Shift the face a little every minute so static pixels don't burn in.
+      const m = Math.floor(d.getTime() / 60000);
+      drift = { x: Math.round(Math.sin(m * 0.9) * this.cols * 0.12), y: Math.round(Math.cos(m * 1.3) * this.rows * 0.1) };
+    }
+    const key = `${this.clockStyle}|${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}|${this.cols}x${this.rows}|${drift.x},${drift.y}`;
     if (key === this.maskKey) return;
     this.maskKey = key;
-    const { cols, rows } = this;
-    const glyphs = [...str].map((ch) => FONT[ch]);
-    const widthUnits = glyphs.reduce((s, g) => s + g[0].length, 0) + glyphs.length - 1;
-    const s = Math.max(1, Math.floor(Math.min((cols * 0.72) / widthUnits, (rows * 0.45) / 7)));
-    const ox = Math.floor((cols - widthUnits * s) / 2);
-    const oy = Math.floor((rows - 7 * s) / 2);
-    const mask = new Uint8Array(cols * rows);
-    let cx = ox;
-    for (const g of glyphs) {
-      const gw = g[0].length;
-      for (let gy = 0; gy < 7; gy++)
-        for (let gx = 0; gx < gw; gx++) {
-          if (g[gy][gx] !== "1") continue;
-          for (let yy = 0; yy < s; yy++)
-            for (let xx = 0; xx < s; xx++) {
-              const x = cx + gx * s + xx, y = oy + gy * s + yy;
-              if (x >= 0 && y >= 0 && x < cols && y < rows) mask[y * cols + x] = 1;
-            }
-        }
-      cx += (gw + 1) * s;
-    }
-    // A soft halo keeps the digits readable over any scene.
-    const halo = Math.max(2, s);
-    const out = mask.slice();
-    for (let y = 0; y < rows; y++)
-      for (let x = 0; x < cols; x++) {
-        if (mask[y * cols + x] !== 1) continue;
-        for (let dy = -halo; dy <= halo; dy++)
-          for (let dx = -halo; dx <= halo; dx++) {
-            const xx = x + dx, yy = y + dy;
-            if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
-            const j = yy * cols + xx;
-            if (out[j] === 0) out[j] = 2;
-          }
-      }
-    this.mask = out;
+    this.mask = buildClockMask(this.clockStyle, this.cols, this.rows, d, drift);
   }
 
   loop(now) {
     requestAnimationFrame(this.loop);
+    if (this.maxFps < 60 && now - this.lastDraw < 1000 / this.maxFps - 2) return;
     this.step(now);
   }
 
   step(now) {
+    this.lastDraw = now;
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     if (!this.scene) return;
     const sdt = dt * this.speed;
     this.t += sdt;
 
-    // Palette morph
     const k = Math.min(1, dt * 5);
     for (const key of KEYS) {
       const c = this.cur[key], tg = this.target[key];
@@ -205,7 +203,7 @@ export class Engine {
 
     for (let i = this.ripples.length - 1; i >= 0; i--) {
       const R = this.ripples[i];
-      R.r += 22 * dt;
+      R.r += 24 * dt;
       R.age += dt;
       R.life -= dt / R.dur;
       if (R.life <= 0) this.ripples.splice(i, 1);
@@ -219,25 +217,17 @@ export class Engine {
 
     if (this.trans < 1) this.trans = Math.min(1, this.trans + dt / 0.9);
     this.overlayK += (this.overlayTarget - this.overlayK) * Math.min(1, dt * 3.5);
-    if (this.overlayK > 0.005) this.buildMask();
+    if (this.overlayK > 0.005) this.updateMask();
 
-    this.render(data);
+    this.render(data, dt);
     this.lastData = data;
     if (this.frames++ === 1) this._ff();
   }
 
-  colorStr(key) {
-    let s = this.colorStrs.get(key);
-    if (!s) {
-      s = `rgb(${((key >> 10) & 31) * 8 + 4},${((key >> 5) & 31) * 8 + 4},${(key & 31) * 8 + 4})`;
-      this.colorStrs.set(key, s);
-    }
-    return s;
-  }
-
-  render(d) {
-    const { ctx, cols, rows, cell, cur } = this;
+  render(d, dt) {
+    const { ctx, cols, rows, cell, cur, S, OX, OY, VX, VY, TH, groups } = this;
     const circle = this.shape === "circle";
+    const dither = this.style === "dither";
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = rgbStr(cur.bg);
     ctx.fillRect(0, 0, this.w, this.h);
@@ -250,28 +240,18 @@ export class Engine {
     const P = this.pointer;
     const hov = this.interact && P.active;
     const t = this.t;
-    const base = cur.base, ink = cur.b, acc = cur.a;
-
-    for (let x = 0; x < cols; x++) this.ax[x] = Math.sin(x * 0.23 + t * 0.7);
-    for (let y = 0; y < rows; y++) this.ay[y] = Math.cos(y * 0.19 - t * 0.5);
-
-    for (const arr of this.buckets.values()) arr.length = 0;
-    const px = this.px, py = this.py, ps = this.ps;
-
-    ctx.fillStyle = rgbStr(base);
-    ctx.beginPath();
-    const half = cell / 2;
+    const CA = cur.a, CB = cur.b, CC = cur.c;
+    const ease = 1 - Math.exp(-dt * 11);
+    const K = 70, DAMP = 11, RP = 7;
+    const counts = [0, 0, 0, 0, 0];
+    const baseSize = cell * 0.13;
 
     for (let y = 0; y < rows; y++) {
-      const cyBase = y * cell + half;
       for (let x = 0; x < cols; x++) {
-        const j = y * cols + x;
-        const i = j * 4;
+        const j = y * cols + x, i = j * 4;
         let a = d[i + 3] / 255, r = d[i], g = d[i + 1], b = d[i + 2];
-
         if (prev) {
-          const na = a * tk, pa = (prev[i + 3] / 255) * (1 - tk);
-          const ta = na + pa;
+          const na = a * tk, pa = (prev[i + 3] / 255) * (1 - tk), ta = na + pa;
           if (ta > 0) {
             r = (r * na + prev[i] * pa) / ta;
             g = (g * na + prev[i + 1] * pa) / ta;
@@ -279,76 +259,79 @@ export class Engine {
           }
           a = ta;
         }
+
+        let tone = -1;
         if (mask) {
           const m = mask[j];
-          if (m === 1) {
-            r += (ink[0] - r) * ok; g += (ink[1] - g) * ok; b += (ink[2] - b) * ok;
-            a += (1 - a) * ok;
-          } else if (m === 2) a *= 1 - 0.92 * ok;
+          if (m === 1 || m === 3) {
+            if (ok > 0.5) { tone = m === 1 ? T_B : T_A; a = 1; }
+            else a *= 1 - ok * 2;
+          } else if (m === 2) a *= 1 - 0.95 * ok;
+          else if (m === 4 && ok > 0.5) { tone = T_DIM; a = 0.42; }
         }
 
-        let s = 0, dx = 0, dy = 0;
+        // Breathing: a slow diagonal swell keeps the empty field alive.
+        const swell = 0.5 + 0.5 * Math.sin(x * 0.18 + y * 0.12 - t * 0.8);
+        let target;
+        if (tone === T_DIM) target = cell * 0.36;
+        else if (tone >= 0) target = cell * 0.82;
+        else if (a < 0.05 || (dither && a < TH[j])) { tone = T_BASE; target = baseSize * (0.85 + 0.35 * swell); }
+        else {
+          tone = nearestTone(r, g, b, CA, CB, CC);
+          target = dither ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8));
+        }
+
+        // Springs: the cursor pushes dots aside, click shockwaves throw them outward.
+        let fx = -K * OX[j], fy = -K * OY[j];
+        if (hov) {
+          const ex = x - P.x, ey = y - P.y, dd = Math.sqrt(ex * ex + ey * ey);
+          if (dd < RP && dd > 0.001) {
+            const f = (1 - dd / RP) ** 2;
+            fx += (ex / dd) * f * 46;
+            fy += (ey / dd) * f * 46;
+            target *= 1 + 0.55 * f;
+            if (tone === T_BASE && f > 0.25) tone = T_DIM;
+          }
+        }
         for (let q = 0; q < rip.length; q++) {
           const R = rip[q];
-          const ex = x - R.x, ey = y - R.y;
-          const dist = Math.sqrt(ex * ex + ey * ey);
-          const z = (dist - R.r) / R.w;
-          if (z > -3 && z < 3) {
+          const ex = x - R.x, ey = y - R.y, dd = Math.sqrt(ex * ex + ey * ey);
+          const z = (dd - R.r) / R.w;
+          if (z > -2.5 && z < 2.5 && dd > 0.001) {
             const e = Math.exp(-z * z) * R.life * R.amp;
-            s += e;
-            if (dist > 0.01) { dx += (ex / dist) * e; dy += (ey / dist) * e; }
+            fx += (ex / dd) * e * 160;
+            fy += (ey / dd) * e * 160;
+            target *= 1 + 0.5 * e;
           }
         }
-        if (hov) {
-          const ex = x - P.x, ey = y - P.y, d2 = ex * ex + ey * ey;
-          if (d2 < 36) { const e = 1 - Math.sqrt(d2) / 6; s += e * e * 0.7; }
-        }
-        const cx = x * cell + half + dx * cell * 0.35;
-        const cy = cyBase + dy * cell * 0.35;
-        const sc = s > 1.5 ? 1.5 : s;
+        let vx = VX[j] + (fx - DAMP * VX[j]) * dt, vy = VY[j] + (fy - DAMP * VY[j]) * dt;
+        let ox = OX[j] + vx * dt, oy = OY[j] + vy * dt;
+        if (ox > 1.2) ox = 1.2; else if (ox < -1.2) ox = -1.2;
+        if (oy > 1.2) oy = 1.2; else if (oy < -1.2) oy = -1.2;
+        VX[j] = vx; VY[j] = vy; OX[j] = ox; OY[j] = oy;
 
-        let sz, cr, cg, cb;
-        if (a < 0.04) {
-          const amb = 0.5 + 0.5 * this.ax[x] * this.ay[y];
-          sz = cell * (0.12 + 0.09 * amb + 0.32 * sc);
-          if (s < 0.05) {
-            const hs = sz / 2;
-            if (circle) { ctx.moveTo(cx + hs, cy); ctx.arc(cx, cy, hs, 0, 6.2832); }
-            else ctx.rect(cx - hs, cy - hs, sz, sz);
-            continue;
-          }
-          const m = Math.min(1, s) * 0.55;
-          cr = base[0] + (acc[0] - base[0]) * m;
-          cg = base[1] + (acc[1] - base[1]) * m;
-          cb = base[2] + (acc[2] - base[2]) * m;
-        } else {
-          const m = a * 1.3 > 1 ? 1 : a * 1.3;
-          cr = base[0] + (r - base[0]) * m;
-          cg = base[1] + (g - base[1]) * m;
-          cb = base[2] + (b - base[2]) * m;
-          sz = cell * (0.28 + 0.6 * a) * (1 + 0.3 * sc);
-          if (sz > cell * 0.94) sz = cell * 0.94;
-        }
-        const key = ((cr >> 3) << 10) | ((cg >> 3) << 5) | (cb >> 3);
-        let arr = this.buckets.get(key);
-        if (!arr) { arr = []; this.buckets.set(key, arr); }
-        px[j] = cx; py[j] = cy; ps[j] = sz;
-        arr.push(j);
+        if (target > cell * 0.95) target = cell * 0.95;
+        S[j] += (target - S[j]) * ease;
+        groups[tone][counts[tone]++] = j;
       }
     }
-    ctx.fill();
 
-    for (const [key, arr] of this.buckets) {
-      if (!arr.length) continue;
-      ctx.fillStyle = this.colorStr(key);
+    const dim = [cur.base[0] + (CC[0] - cur.base[0]) * 0.45, cur.base[1] + (CC[1] - cur.base[1]) * 0.45, cur.base[2] + (CC[2] - cur.base[2]) * 0.45];
+    const fills = [cur.base, dim, CC, CA, CB];
+    const half = cell / 2;
+    for (let gI = 0; gI < 5; gI++) {
+      const n = counts[gI];
+      if (!n) continue;
+      const arr = groups[gI];
+      ctx.fillStyle = rgbStr(fills[gI]);
       ctx.beginPath();
-      for (let n = 0; n < arr.length; n++) {
-        const j = arr[n], hs = ps[j] / 2;
-        if (circle) { ctx.moveTo(px[j] + hs, py[j]); ctx.arc(px[j], py[j], hs, 0, 6.2832); }
-        else ctx.rect(px[j] - hs, py[j] - hs, ps[j], ps[j]);
+      for (let q = 0; q < n; q++) {
+        const j = arr[q], x = j % cols, y = (j / cols) | 0;
+        const cx = x * cell + half + OX[j] * cell, cy = y * cell + half + OY[j] * cell, hs = S[j] / 2;
+        if (circle) { ctx.moveTo(cx + hs, cy); ctx.arc(cx, cy, hs, 0, 6.2832); }
+        else ctx.rect(cx - hs, cy - hs, hs * 2, hs * 2);
       }
       ctx.fill();
     }
-    if (this.buckets.size > 4000) this.buckets.clear();
   }
 }
