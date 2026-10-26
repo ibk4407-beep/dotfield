@@ -1,4 +1,4 @@
-import { check, parse, SCENE_IDS, CLOCK_STYLES } from "../public/formula.js";
+import { check, parse, SCENE_IDS, CLOCK_STYLES, SURFACES } from "../public/formula.js";
 
 const SHAPES = ["square", "circle"];
 const STYLES = ["halftone", "dither"];
@@ -7,11 +7,14 @@ const IDLES = [0, 1, 3, 5, 10];
 const HEX = /^#[0-9a-f]{6}$/i;
 const MODEL = "@cf/openai/gpt-oss-120b";
 const FALLBACK_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const CANDIDATES = 3;
+const GRACE_MS = 12000;
 
 const THEME_SCHEMA = {
   type: "object",
   properties: {
     idea: { type: "string" },
+    surface: { type: "string", enum: SURFACES },
     name: { type: "string" },
     expr: { type: "string" },
     speed: { type: "number" },
@@ -20,43 +23,50 @@ const THEME_SCHEMA = {
     b: { type: "string" },
     c: { type: "string" },
   },
-  required: ["name", "expr", "speed", "bg", "a", "b", "c"],
+  required: ["surface", "name", "expr", "speed", "bg", "a", "b", "c"],
 };
 
-const SYSTEM = `You are a generative artist who designs animated dot-matrix patterns (in the spirit of tixy.land) for a minimal screensaver.
-For the user's keyword, invent ONE original pattern formula and a color palette. Return only a JSON object: {"idea","name","expr","speed","bg","a","b","c"}.
+const SYSTEM = `You are a senior motion designer creating ONE animated dot pattern for a refined, minimal screensaver
+(think Nothing's dot-matrix language, Swiss posters, halftone print, Stripe's dot globe). Restraint over spectacle.
+Return only a JSON object: {"idea","surface","name","expr","speed","bg","a","b","c"}.
 
-The formula "expr" is evaluated for every dot, every frame. Its result is clamped to -1..1:
-- 0 = empty dot, 1 = big accent/soft dot, -1 = big dark ink dot. Magnitude is dot size.
-Variables: x, y (integer grid position), w, h (grid size), u (-aspect..aspect, left→right), v (-1..1, top→bottom),
-r = distance from center, a = angle around center (-pi..pi), t = seconds, i = dot index, mx, my = pointer position in u/v space.
-Constants: pi, tau, e. Operators: + - * / % ^ (power), comparisons < > <= >= == != (give 1 or 0), && ||, cond ? x : y.
-Functions: sin cos tan asin acos atan atan2 sqrt abs floor ceil round fract sign min max pow exp log mod clamp mix step smoothstep hypot noise(x,y,z) (smooth 0..1) hash(x,y) (random 0..1).
-Rules: no other names exist. Must animate with t. Keep under 220 characters. Use a*integer for angular symmetry.
-Composition: restraint looks refined. Most dots must stay empty (value near 0); the motif should cover roughly 15-60% of the field, never fill it.
+The formula "expr" is evaluated for every dot, every frame; the result is clamped to -1..1:
+0 = empty dot, positive = soft/accent dot (1 = the accent color, used sparingly), negative = dark ink dot. Magnitude = dot size.
+Variables: u (-aspect..aspect, left→right), v (-1..1, top→bottom), r = distance from center, a = angle (-pi..pi),
+t = seconds, x, y = integer grid position, w, h = grid size, i = dot index, mx, my = pointer in u/v space.
+Constants: pi, tau, e. Operators: + - * / % ^, comparisons (1 or 0), && ||, cond ? x : y.
+Functions: sin cos tan asin acos atan atan2 sqrt abs floor ceil round fract sign min max pow exp log mod clamp mix step smoothstep hypot
+noise(x,y,z) (smooth 0..1), hash(x,y) (static random 0..1). No other names exist. Under 220 characters.
 
-Think like a motion designer first: in "idea", describe in one sentence what the viewer sees (shape, rhythm, motion) that evokes the keyword.
-Then build it from fitting techniques, combining two or three:
-- moving points / orbits: 1 - hypot(u - X(t), v - Y(t))*k
-- falling or rising streaks per column: fract(y*k + t*s + hash(x, 0))
-- grids, tiles, checkers: floor(), mod(), fract() of x, y
-- polar petals / stars: cos(a*k) compared with r
-- stripes and bands: sin(u*k + t), step(), smoothstep()
-- organic fields: noise(u*k, v*k, t*s)
-- pulses: sin(t*k) scaling a shape; masks: smoothstep(edge, edge+0.05, value)
-- negative values (ink) for shadows, outlines or a second layer
-Avoid the generic "sin(a*k + r*k - t)" swirl unless the keyword is literally a spiral.
+"surface" is the object the pattern is printed on:
+- "flat": the screen itself (posters, typography-like layouts, grids, fields).
+- "sphere": wrapped on a slowly rotating dot globe; u = longitude (-1.6..1.6), v = latitude (-1 top..1 bottom). Great for planets, eyes, seeds, cells, weather.
+- "terrain": a landscape seen in perspective; positive values rise as hills. Great for sea, dunes, sound, mountains, cities.
+Pick the surface that makes the keyword feel most like an object or a place.
 
-Examples of the style (do NOT copy, create something new):
-- ripples: sin(r*14 - t*3) * (1.2 - r)
-- spiral arms: sin(a*3 + r*10 - t*2) * smoothstep(1.3, 0.1, r)
-- rain streaks: fract(y*0.08 + t*0.9 + hash(x, 1)) > 0.9 ? 1 : 0
-- beating heart: (pow(u*u + pow(-v*1.2 + 0.3*sqrt(abs(u)), 2) - 0.35*(1 + 0.12*sin(t*6)), 1) < 0) ? 1 : -0.15*sin(r*20 - t*4)
-- drifting clouds: noise(u*2 + t*0.2, v*2, t*0.3)*2.4 - 1.2
-- orbiting bodies: max(0, 1 - min(hypot(u - cos(t)*0.6, v - sin(t)*0.6), hypot(u + cos(t*1.3)*0.4, v + sin(t*1.3)*0.4))*2.5)
+Design principles (follow all):
+1. One clear motif that evokes the keyword. In "idea", say in one sentence what the viewer sees and how it moves.
+2. Negative space: most dots stay near 0; the motif covers about 15-45% of the field.
+3. Smooth and legible: build shapes with smoothstep edges, gradients and lines a few dots wide. No per-dot static.
+4. Calm motion: t multipliers mostly 0.1-1.5. Never feed t into hash(). Nothing should flicker.
+5. Hierarchy: soft positive values for the body, values near 1 only for a few highlights, negative values for a second layer or shadow.
+6. Avoid the generic "sin(a*k + r*k - t)" swirl and plain full-screen noise.
 
-Palette: bg = very light tint of the theme hue (lightness > 92%, not pure white); a = vivid accent; b = deep dark color; c = soft mid tone. All #rrggbb.
-name = 1-3 words in the same language as the keyword. speed = 0.4 (calm) to 1.8 (energetic).`;
+Techniques to combine: moving points 1 - hypot(u - X(t), v - Y(t))*k · column streaks smoothstep(0.8, 1, fract(y*k + t*s + hash(x, 0)))
+· tiles floor()/fract() · petals cos(a*k) vs r · bands smoothstep() on sin(u*k + t) · organic noise(u*k, v*k, t*s) thresholded with smoothstep
+· pulses sin(t*k) scaling a shape · thin outlines 1 - smoothstep(0, w, abs(f)).
+
+Examples (style only, do not copy):
+- ripples (flat): sin(r*14 - t*3) * (1.2 - r) * 0.8
+- rain (flat): smoothstep(0.75, 1, fract(y*0.03 + t*0.5 + hash(x, 1)))
+- heart (flat): (pow(u*u + pow(-v*1.2 + 0.3*sqrt(abs(u)), 2) - 0.35*(1 + 0.12*sin(t*6)), 1) < 0) ? 0.8 : -0.12*sin(r*20 - t*4)
+- storm bands (sphere): smoothstep(0.55, 0.75, noise(u*2 + t*0.15, v*5, t*0.1)) * (1 - abs(v)) - 0.4*smoothstep(0.9, 1, abs(v))
+- dunes (terrain): smoothstep(0.3, 0.9, sin(u*3 + noise(u, v*2, 0)*3 + t*0.2)*0.5 + 0.5) * 0.7
+- orbit (flat): max(0, 1 - min(hypot(u - cos(t)*0.6, v - sin(t)*0.6), hypot(u + cos(t*1.3)*0.4, v + sin(t*1.3)*0.4))*2.5)
+
+Palette, sophisticated and muted: bg = very light tint of the theme hue (lightness > 92%, not pure white);
+a = one confident accent; b = deep near-black tinted with the hue; c = soft mid tone between bg and a. All #rrggbb.
+name = 1-3 words in the same language as the keyword. speed = 0.4 (calm) to 1.4 (lively).`;
 
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), {
@@ -101,17 +111,17 @@ function sanitizeConfig(raw) {
   if (!raw || typeof raw !== "object") return null;
   const num = (v, lo, hi, fb) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, +v)) : fb);
   const formula = raw.formula && validFormula(raw.formula.expr)
-    ? { name: String(raw.formula.name || "AI").slice(0, 40), expr: raw.formula.expr.trim() }
+    ? { name: String(raw.formula.name || "AI").slice(0, 40), expr: raw.formula.expr.trim(), surface: SURFACES.includes(raw.formula.surface) ? raw.formula.surface : "flat" }
     : null;
   return {
-    scene: SCENE_IDS.includes(raw.scene) ? raw.scene : formula ? "ai" : "koi",
+    scene: SCENE_IDS.includes(raw.scene) ? raw.scene : formula ? "ai" : "globe",
     formula,
     palette: typeof raw.palette === "string" ? raw.palette.slice(0, 24) : "custom",
     name: typeof raw.name === "string" ? raw.name.slice(0, 40) : "",
     colors: sanitizeColors(raw.colors || {}),
     style: STYLES.includes(raw.style) ? raw.style : "halftone",
     shape: SHAPES.includes(raw.shape) ? raw.shape : "circle",
-    clockStyle: CLOCKS.includes(raw.clockStyle) ? raw.clockStyle : "dot",
+    clockStyle: CLOCKS.includes(raw.clockStyle) ? raw.clockStyle : "serif",
     cell: Math.round(num(raw.cell, 10, 24, 14)),
     speed: num(raw.speed, 0.2, 2.5, 1),
     idle: IDLES.includes(+raw.idle) ? +raw.idle : 3,
@@ -150,12 +160,12 @@ function parseModelOutput(out) {
 
 async function callModel(env, messages, attempt) {
   // A reasoning model writes far more varied formulas; Llama is the fallback.
-  if (attempt < 3) {
+  if (attempt < 2) {
     try {
       const out = await env.AI.run(MODEL, { messages, reasoning: { effort: "low" }, max_tokens: 4000 });
       return parseModelOutput(out);
     } catch (e) {
-      if (attempt < 2) throw e;
+      if (attempt < 1) throw e;
     }
   }
   const out = await env.AI.run(FALLBACK_MODEL, {
@@ -167,6 +177,38 @@ async function callModel(env, messages, attempt) {
   return parseModelOutput(out);
 }
 
+// One candidate: the model iterates, each rejected formula going back with the validator's reason.
+async function candidate(env, prompt, seed) {
+  const messages = [
+    { role: "system", content: SYSTEM },
+    { role: "user", content: `Keyword: "${prompt}"\n${seed}` },
+  ];
+  let lastError = "no output";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let parsed;
+    try {
+      parsed = await callModel(env, messages, attempt);
+    } catch (e) {
+      lastError = String((e && e.message) || e);
+      continue;
+    }
+    const expr = typeof parsed.expr === "string" ? parsed.expr.trim().replace(/;$/, "") : "";
+    const verdict = check(expr, { allowCodegen: false });
+    if (verdict.ok) return { parsed, expr, verdict };
+    lastError = verdict.error;
+    messages.push({ role: "assistant", content: JSON.stringify(parsed) });
+    messages.push({ role: "user", content: `That formula was rejected: ${verdict.error}. Fix it and return the full JSON again, still evoking "${prompt}".` });
+  }
+  throw new Error(lastError);
+}
+
+// Each candidate gets a different creative brief so the three explore different ideas.
+const SEEDS = [
+  "Interpret the keyword literally: show the thing itself as a clear silhouette or object.",
+  "Interpret the keyword through its motion or rhythm rather than its shape.",
+  "Interpret the keyword abstractly, like a Swiss poster: geometry, repetition and negative space.",
+];
+
 async function theme(req, env) {
   let body;
   try {
@@ -177,35 +219,32 @@ async function theme(req, env) {
   const prompt = typeof body.prompt === "string" ? body.prompt.trim().slice(0, 120) : "";
   if (!prompt) return json({ error: "empty_prompt" }, 400);
 
-  const messages = [
-    { role: "system", content: SYSTEM },
-    { role: "user", content: `Keyword: "${prompt}"` },
-  ];
-  let lastError = "no output";
-  // The model iterates: each rejected formula goes back with the validator's reason.
-  for (let attempt = 0; attempt < 4; attempt++) {
-    let parsed;
-    try {
-      parsed = await callModel(env, messages, attempt);
-    } catch (e) {
-      lastError = String((e && e.message) || e);
-      continue;
+  // Several candidates in parallel; the validator's aesthetic score picks the winner. Once one passes,
+  // the others get a short grace period instead of holding the answer hostage to the slowest.
+  const { ok, errors } = await new Promise((resolve) => {
+    const ok = [], errors = [];
+    let pending = CANDIDATES, timer = null;
+    const finish = () => { clearTimeout(timer); resolve({ ok: ok.slice(), errors }); };
+    for (const seed of SEEDS.slice(0, CANDIDATES)) {
+      candidate(env, prompt, seed)
+        .then((r) => { ok.push(r); if (!timer) timer = setTimeout(finish, GRACE_MS); })
+        .catch((e) => errors.push(String((e && e.message) || e)))
+        .finally(() => { if (--pending === 0) finish(); });
     }
-    const expr = typeof parsed.expr === "string" ? parsed.expr.trim().replace(/;$/, "") : "";
-    const verdict = check(expr, { allowCodegen: false });
-    if (verdict.ok) {
-      return json({
-        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 40) : prompt.slice(0, 40),
-        expr,
-        speed: Math.min(1.8, Math.max(0.4, Number.isFinite(+parsed.speed) ? +parsed.speed : 1)),
-        colors: sanitizeColors(parsed),
-      });
-    }
-    lastError = verdict.error;
-    messages.push({ role: "assistant", content: JSON.stringify(parsed) });
-    messages.push({ role: "user", content: `That formula was rejected: ${verdict.error}. Fix it and return the full JSON again, still evoking "${prompt}".` });
-  }
-  return json({ error: "ai_failed", detail: lastError }, 502);
+  });
+  if (!ok.length) return json({ error: "ai_failed", detail: errors.join(" | ") }, 502);
+  ok.sort((a, b) => b.verdict.score - a.verdict.score);
+  const { parsed, expr, verdict } = ok[0];
+  return json({
+    name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 40) : prompt.slice(0, 40),
+    idea: typeof parsed.idea === "string" ? parsed.idea.slice(0, 200) : "",
+    surface: SURFACES.includes(parsed.surface) ? parsed.surface : "flat",
+    expr,
+    speed: Math.min(1.6, Math.max(0.4, Number.isFinite(+parsed.speed) ? +parsed.speed : 1)),
+    colors: sanitizeColors(parsed),
+    score: Math.round(verdict.score * 100) / 100,
+    candidates: ok.length,
+  });
 }
 
 const ID_CHARS = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";

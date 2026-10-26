@@ -656,7 +656,7 @@ export class Formula {
 }
 
 export const FORMULAS = {
-  plasma: "1 - smoothstep(0, 0.32, abs(sin((sin(u*3 + t*0.6) + sin(v*4 - t*0.8) + sin(r*6 - t))*2.2)))",
+  plasma: "1 - smoothstep(0, 0.5, abs(sin((sin(u*2.6 + t*0.5) + sin(v*3.4 - t*0.7) + sin(r*5 - t*0.8))*1.6)))",
   tunnel: "(1 - smoothstep(0, 0.35, abs(sin(1.1/(r + 0.06) - t*2.2 + a*2)))) * smoothstep(0.03, 0.55, r)",
   spiral: "sin(a*3 + r*11 - t*2.4) * smoothstep(1.3, 0.15, r)",
   pulse: "sin(r*15 - t*3.5) * clamp(1.25 - r, 0, 1)",

@@ -2,11 +2,12 @@
 // Only numbers, whitelisted variables/functions and operators exist, so a formula can't reach the page.
 
 export const SCENE_IDS = [
-  "koi", "wave", "rain", "flow", "life",
-  "stars", "matrix", "fireworks", "boids", "snow",
+  "globe", "terrain", "torus", "galaxy", "silk", "rings", "moon", "aura", "helix", "harmono",
+  "koi", "wave", "rain", "flow", "life", "stars", "matrix", "fireworks", "boids", "snow",
   "plasma", "tunnel", "spiral", "pulse", "kaleido", "cloud",
 ];
-export const CLOCK_STYLES = ["dot", "seg", "analog", "binary", "full"];
+export const CLOCK_STYLES = ["dot", "serif", "grotesk", "mono", "condensed", "seg", "analog", "railway", "ring", "word", "progress", "binary", "full"];
+export const SURFACES = ["flat", "sphere", "terrain"];
 
 const VARS = ["x", "y", "u", "v", "r", "a", "t", "i", "w", "h", "mx", "my"];
 const CONSTS = { pi: Math.PI, tau: Math.PI * 2, e: Math.E };
@@ -250,10 +251,19 @@ export function check(src, opts) {
   } catch (e) {
     return { ok: false, error: e.message };
   }
-  const cols = 32, rows = 18, aspect = cols / rows;
+  const cols = 48, rows = 27, aspect = cols / rows;
   let finite = 0, total = 0, lit = 0, big = 0, magnitude = 0, spatial = 0, temporal = 0;
-  let prev = null;
-  for (const t of [0, 1.7, 3.9]) {
+  let flicker = 0;
+  // Pearson correlation between neighbours along each axis; random static is ~0 in every direction.
+  let corr, structSum = 0, structN = 0;
+  const pearson = ([sa, sb, saa, sbb, sab, n]) => {
+    const cov = sab / n - (sa / n) * (sb / n), va = saa / n - (sa / n) ** 2, vb = sbb / n - (sb / n) ** 2;
+    return va > 1e-9 && vb > 1e-9 ? cov / Math.sqrt(va * vb) : 0;
+  };
+  const addPair = (c, a, b) => { c[0] += a; c[1] += b; c[2] += a * a; c[3] += b * b; c[4] += a * b; c[5]++; };
+  let prev = null, prevT = 0;
+  // Pairs 0.06s apart measure flicker; the wider gaps measure overall motion.
+  for (const t of [0, 0.06, 1.7, 1.76, 3.9]) {
     const vals = new Float64Array(cols * rows);
     let sum = 0, sq = 0;
     for (let y = 0; y < rows; y++)
@@ -272,12 +282,23 @@ export function check(src, opts) {
       }
     const n = cols * rows, mean = sum / n;
     spatial = Math.max(spatial, Math.sqrt(Math.max(0, sq / n - mean * mean)));
+    corr = [[0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0]];
+    for (let y = 0; y < rows - 1; y++)
+      for (let x = 0; x < cols - 1; x++) {
+        const k = y * cols + x;
+        addPair(corr[0], vals[k], vals[k + 1]);
+        addPair(corr[1], vals[k], vals[k + cols]);
+        addPair(corr[2], vals[k], vals[k + cols + 1]);
+      }
+    if (sq / n - mean * mean > 1e-6) { structSum += Math.max(...corr.map(pearson)); structN++; }
     if (prev) {
       let d = 0;
       for (let k = 0; k < n; k++) d += Math.abs(vals[k] - prev[k]);
-      temporal = Math.max(temporal, d / n);
+      if (t - prevT < 0.1) flicker = Math.max(flicker, d / n);
+      else temporal = Math.max(temporal, d / n);
     }
     prev = vals;
+    prevT = t;
   }
   if (finite / total < 0.9) return { ok: false, error: "formula produces NaN or Infinity for most dots" };
   const coverage = lit / total;
@@ -287,5 +308,15 @@ export function check(src, opts) {
   if (fill > 0.6 || magnitude / total > 0.5) return { ok: false, error: `pattern fills ${Math.round(fill * 100)}% of the dots with large dots; leave most dots empty (values near 0) so the shape reads, aim for 15-60%` };
   if (spatial < 0.04) return { ok: false, error: "pattern has no spatial structure" };
   if (temporal < 0.004) return { ok: false, error: "pattern does not animate; use t" };
-  return { ok: true, coverage, spatial, temporal };
+  const structure = structN ? structSum / structN : 0;
+  const roughness = 1 - structure;
+  if (flicker > 0.2) return { ok: false, error: "pattern flickers frame to frame; avoid hash() of t and very fast t multipliers, move things smoothly" };
+  if (structure < 0.3) return { ok: false, error: "pattern looks like random static; build smooth, legible shapes instead of per-dot noise" };
+  // Aesthetic score: a calm, legible motif covering a moderate share of the field wins.
+  const score = 1
+    - 2 * Math.max(0, Math.abs(fill - 0.28) - 0.14)
+    - 1.2 * Math.max(0, 0.65 - structure)
+    - 3 * Math.max(0, flicker - 0.05)
+    + 0.6 * Math.min(spatial, 0.45);
+  return { ok: true, coverage, fill, spatial, temporal, flicker, roughness, structure, score };
 }

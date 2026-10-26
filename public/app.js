@@ -1,7 +1,11 @@
-import { Engine, drawDots, hexToRgb } from "./engine.js";
-import { CATALOG, AI_ICON, Formula } from "./scenes.js";
-import { compile, CLOCK_STYLES } from "./formula.js";
-import { buildClockMask } from "./clock.js";
+import { Engine, drawDots, drawFree, hexToRgb } from "./engine.js";
+import { CATALOG as CLASSIC, AI_ICON, Formula } from "./scenes.js";
+import { STUDIO, FormulaSurface } from "./scenes3d.js";
+import { compile, CLOCK_STYLES, SURFACES } from "./formula.js";
+import { buildClockMask, FACE_FONTS } from "./clock.js";
+
+const CATALOG = [...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CLOCK_LABELS = { dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
   graphite: { name: "Graphite", bg: "#f3f3f1", base: "#dcdcd8", a: "#ff4f1a", b: "#1c1c1e", c: "#a3a3a0" },
@@ -18,8 +22,8 @@ const IDLES = [0, 1, 3, 5, 10];
 const CLOCKS = [...CLOCK_STYLES, "off"];
 const STORE_KEY = "dotfield:v1";
 const DEFAULTS = {
-  scene: "koi", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
-  theme: "auto", style: "halftone", shape: "circle", clockStyle: "dot",
+  scene: "globe", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
+  theme: "auto", style: "halftone", shape: "circle", clockStyle: "serif",
   cell: 14, speed: 1, idle: 3, full: true, interact: true,
   wake: true, burnin: true, eco: false, customScenes: [],
 };
@@ -77,7 +81,7 @@ function normalize(s) {
   n.customScenes = (Array.isArray(n.customScenes) ? n.customScenes : [])
     .filter((x) => x && typeof x.id === "string" && typeof x.expr === "string" && /^ai:[a-z0-9]{4,12}$/.test(x.id))
     .slice(0, 16)
-    .map((x) => ({ id: x.id, name: String(x.name || "AI").slice(0, 40), expr: x.expr.slice(0, 320) }));
+    .map((x) => ({ id: x.id, name: String(x.name || "AI").slice(0, 40), expr: x.expr.slice(0, 320), surface: SURFACES.includes(x.surface) ? x.surface : "flat" }));
   if (!CATALOG.some((x) => x.id === n.scene) && !n.customScenes.some((x) => x.id === n.scene)) n.scene = DEFAULTS.scene;
   if (!["auto", "light", "dark"].includes(n.theme)) n.theme = "auto";
   if (!["halftone", "dither"].includes(n.style)) n.style = "halftone";
@@ -107,11 +111,12 @@ const isDark = () => state.theme === "dark" || (state.theme === "auto" && mq.mat
 const viewColors = (c = state.colors) => (isDark() ? toDark(c) : c);
 const bc = "BroadcastChannel" in window ? new BroadcastChannel("dotfield") : null;
 
+const makeFormula = (expr, surface) => () => (surface && surface !== "flat" ? new FormulaSurface(expr, surface) : new Formula(expr));
 function sceneEntry(id = state.scene) {
   const builtin = CATALOG.find((x) => x.id === id);
   if (builtin) return builtin;
   const cs = state.customScenes.find((x) => x.id === id);
-  if (cs) return { id: cs.id, name: cs.name, icon: AI_ICON, expr: cs.expr, make: () => new Formula(cs.expr) };
+  if (cs) return { id: cs.id, name: cs.name, icon: AI_ICON, expr: cs.expr + cs.surface, make: makeFormula(cs.expr, cs.surface) };
   return CATALOG[0];
 }
 const allScenes = () => [...CATALOG.map((x) => x.id), ...state.customScenes.map((x) => x.id)];
@@ -268,19 +273,23 @@ $("#btnReset").addEventListener("click", () => {
 });
 
 /* ---------- Clock style picker ---------- */
+const clockGrid = $("#clockGrid");
+clockGrid.innerHTML = CLOCKS.map((k) => `<button class="clock-opt" data-v="${k}">${k === "off"
+  ? `<span class="off-ic">${svg('<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>')}</span>`
+  : "<canvas></canvas>"}<span>${CLOCK_LABELS[k]}</span></button>`).join("");
 function renderClockPreviews() {
   const v = viewColors(), rgb = Object.fromEntries(Object.entries(v).map(([k, h]) => [k, hexToRgb(h)]));
-  const cols = 56, rows = 32, now = new Date();
+  const cols = 64, rows = 36, now = new Date();
   for (const btn of $$(".clock-opt")) {
     const cv = btn.querySelector("canvas");
     if (!cv) continue;
-    const mask = buildClockMask(btn.dataset.v, cols, rows, now, { x: 0, y: 0 });
+    const { tone, alpha } = buildClockMask(btn.dataset.v, cols, rows, now, { x: 0, y: 0 });
     const img = new Uint8ClampedArray(cols * rows * 4);
-    for (let j = 0; j < mask.length; j++) {
-      const m = mask[j];
+    for (let j = 0; j < tone.length; j++) {
+      const m = tone[j];
       if (m !== 1 && m !== 3 && m !== 4) continue;
       const col = m === 1 ? rgb.b : m === 3 ? rgb.a : rgb.c;
-      img.set([col[0], col[1], col[2], m === 4 ? 110 : 255], j * 4);
+      img.set([col[0], col[1], col[2], m === 4 ? 110 : alpha[j] * 255], j * 4);
     }
     cv.width = cols * 4; cv.height = rows * 4;
     drawDots(cv.getContext("2d"), img, cols, rows, 4, rgb, state.shape, "halftone");
@@ -310,7 +319,7 @@ function addThumb(canvas, make) {
   canvas.height = rows * cell;
   const low = document.createElement("canvas");
   low.width = cols; low.height = rows;
-  const A = { cols, rows, t: Math.random() * 10, pal: engine.A.pal, rgb: engine.A.rgb, pointer: { x: -99, y: -99, active: false }, ripples: [] };
+  const A = { cols, rows, w: canvas.width, h: canvas.height, cell: Math.max(2.2, canvas.width / 115), t: Math.random() * 10, pal: engine.A.pal, rgb: engine.A.rgb, pointer: { x: -99, y: -99, px: -99, py: -99, active: false }, ripples: [] };
   let scene;
   try { scene = make(); scene.init(A); } catch { return; }
   thumbs.set(canvas, { scene, A, low, lctx: low.getContext("2d", { willReadFrequently: true }), ctx: canvas.getContext("2d"), cell });
@@ -326,6 +335,11 @@ function tickThumbs() {
   for (const [canvas, th] of thumbs) {
     if (!canvas.isConnected) { thumbs.delete(canvas); continue; }
     th.A.t += dt;
+    if (th.scene.free) {
+      th.scene.update(dt, th.A);
+      drawFree(th.ctx, th.scene.points(th.A), th.A.w, th.A.h, engine.A.rgb, state.shape);
+      continue;
+    }
     if (!th.scene.persist) th.lctx.clearRect(0, 0, th.A.cols, th.A.rows);
     th.scene.update(dt, th.A);
     th.scene.draw(th.lctx, th.A);
@@ -344,7 +358,8 @@ function card(entry, i, deletable) {
 function renderSceneGrids() {
   if (!panels.scenes.classList.contains("open")) return;
   clearThumbs((c) => c.closest("#panelScenes"));
-  sceneGrid.innerHTML = CATALOG.map((e, i) => card(e, i, false)).join("");
+  sceneGrid.innerHTML = CATALOG.filter((e) => e.group === "studio").map((e, i) => card(e, i, false)).join("");
+  $("#classicGrid").innerHTML = CATALOG.filter((e) => e.group === "classic").map((e, i) => card(e, i + 20, false).replace(/<small>\d*<\/small>/, "<small></small>")).join("");
   const custom = state.customScenes.map((c) => sceneEntry(c.id));
   $("#aiScenesField").hidden = !custom.length;
   aiSceneGrid.innerHTML = custom.map((e, i) => card(e, i, true)).join("");
@@ -656,14 +671,14 @@ function renderAICard(entry, colors, speed) {
   clearThumbs((c) => c.closest("#aiResult"));
   const v = viewColors(colors);
   aiResult.innerHTML = `<div class="ai-card">
-    <div class="row"><div><div class="nm">${escapeHtml(entry.name)}</div><div class="meta">${speed.toFixed(1)}×</div></div>
+    <div class="row"><div><div class="nm">${escapeHtml(entry.name)}</div><div class="meta">${(entry.surface || "flat").toUpperCase()} · ${speed.toFixed(1)}×</div></div>
       <span class="check">${svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>')}</span></div>
     <canvas class="preview"></canvas>
     <div class="pal">${[v.bg, v.base, v.c, v.a, v.b].map((h) => `<i style="background:${h}"></i>`).join("")}</div>
     <textarea class="code" spellcheck="false" aria-label="式">${escapeHtml(entry.expr)}</textarea>
     <div class="code-err"></div>
   </div>`;
-  addThumb(aiResult.querySelector("canvas"), () => new Formula(entry.expr));
+  addThumb(aiResult.querySelector("canvas"), () => makeFormula(entry.expr, entry.surface)());
   const code = aiResult.querySelector(".code"), err = aiResult.querySelector(".code-err");
   let t;
   code.addEventListener("input", () => {
@@ -676,7 +691,7 @@ function renderAICard(entry, colors, speed) {
         err.textContent = "";
         update({ customScenes: state.customScenes.map((x) => (x.id === entry.id ? { ...x, expr } : x)), scene: entry.id });
         clearThumbs((c) => c.closest("#aiResult"));
-        addThumb(aiResult.querySelector("canvas"), () => new Formula(expr));
+        addThumb(aiResult.querySelector("canvas"), makeFormula(expr, entry.surface));
       } catch (ex) {
         code.classList.add("bad");
         err.textContent = ex.message;
@@ -707,7 +722,7 @@ aiForm.addEventListener("submit", async (e) => {
     if (!res.ok) throw new Error(res.status);
     const t = await res.json();
     compile(t.expr);
-    const entry = { id: newId(), name: t.name, expr: t.expr };
+    const entry = { id: newId(), name: t.name, expr: t.expr, surface: SURFACES.includes(t.surface) ? t.surface : "flat" };
     customColors = { ...t.colors, name: t.name };
     update({
       customScenes: [entry, ...state.customScenes].slice(0, 16),
@@ -738,7 +753,7 @@ shareBtn.addEventListener("click", async () => {
   try {
     const { customScenes, theme, ...config } = state;
     const cs = customScenes.find((x) => x.id === state.scene);
-    if (cs) config.formula = { name: cs.name, expr: cs.expr };
+    if (cs) config.formula = { name: cs.name, expr: cs.expr, surface: cs.surface };
     const res = await fetch("/api/presets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ config }) });
     if (!res.ok) throw new Error(res.status);
     const { id } = await res.json();
@@ -803,7 +818,8 @@ async function boot() {
   apply({ instant: true });
   const pid = new URLSearchParams(location.search).get("p");
   let shared = false;
-  const tasks = [engine.firstFrame, wait(DISPLAY ? 500 : 1100), document.fonts ? document.fonts.ready.catch(() => {}) : null];
+  const fontsReady = document.fonts ? Promise.all(FACE_FONTS.map((f) => document.fonts.load(f).catch(() => {}))).then(() => document.fonts.ready) : null;
+  const tasks = [engine.firstFrame, wait(DISPLAY ? 500 : 1100), fontsReady];
   if (pid && /^[A-Za-z0-9]{6,16}$/.test(pid)) {
     tasks.push(
       fetch(`/api/presets/${pid}`)
@@ -813,7 +829,7 @@ async function boot() {
           const { formula, ...cfg } = d.config;
           const patch = { ...cfg, theme: state.theme, customScenes: state.customScenes };
           if (formula && formula.expr) {
-            const entry = { id: newId(), name: formula.name || "Shared", expr: formula.expr };
+            const entry = { id: newId(), name: formula.name || "Shared", expr: formula.expr, surface: formula.surface || "flat" };
             patch.customScenes = [entry, ...state.customScenes].slice(0, 16);
             patch.scene = entry.id;
           }

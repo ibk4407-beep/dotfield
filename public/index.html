@@ -17,7 +17,7 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&family=Instrument+Serif:ital@0;1&family=Bebas+Neue&display=swap">
 <link rel="stylesheet" href="/styles.css">
 <script type="module" src="/app.js"></script>
 </head>
@@ -79,8 +79,15 @@
       <h2>シーン</h2>
       <button class="close-btn" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
-    <div class="field" style="--i:0"><div class="scene-grid" id="sceneGrid"></div></div>
-    <div class="field" style="--i:1" id="aiScenesField" hidden>
+    <div class="field" style="--i:0">
+      <div class="label">Studio</div>
+      <div class="scene-grid" id="sceneGrid"></div>
+    </div>
+    <div class="field" style="--i:1">
+      <div class="label">Classic</div>
+      <div class="scene-grid" id="classicGrid"></div>
+    </div>
+    <div class="field" style="--i:2" id="aiScenesField" hidden>
       <div class="label">AI</div>
       <div class="scene-grid" id="aiSceneGrid"></div>
     </div>
@@ -129,14 +136,7 @@
     </div>
     <div class="field" style="--i:5">
       <div class="label">時計</div>
-      <div class="clock-grid" id="clockGrid">
-        <button class="clock-opt" data-v="dot"><canvas width="96" height="54"></canvas><span>Dot</span></button>
-        <button class="clock-opt" data-v="seg"><canvas width="96" height="54"></canvas><span>Segment</span></button>
-        <button class="clock-opt" data-v="analog"><canvas width="96" height="54"></canvas><span>Analog</span></button>
-        <button class="clock-opt" data-v="binary"><canvas width="96" height="54"></canvas><span>Binary</span></button>
-        <button class="clock-opt" data-v="full"><canvas width="96" height="54"></canvas><span>Date</span></button>
-        <button class="clock-opt" data-v="off"><span class="off-ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/></svg></span><span>Off</span></button>
-      </div>
+      <div class="clock-grid" id="clockGrid"></div>
     </div>
     <div class="field" style="--i:6">
       <div class="label">自動起動</div>
