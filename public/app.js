@@ -278,7 +278,7 @@ document.addEventListener("fullscreenchange", () => {
 
 /* ---------- Pointer & keyboard ---------- */
 const canvas = $("#field");
-let lastRipple = 0;
+let lastRipple = 0, lastPos = null;
 addEventListener("pointermove", (e) => {
   if (saver) {
     if (saverGrace()) return;
@@ -286,7 +286,10 @@ addEventListener("pointermove", (e) => {
     else if (Math.hypot(e.clientX - saverOrigin.x, e.clientY - saverOrigin.y) > 14) exitSaver();
     return;
   }
-  lastActive = performance.now();
+  // Browsers fire synthetic moves under a still cursor when layout changes; those aren't activity.
+  const moved = !lastPos || e.clientX !== lastPos.x || e.clientY !== lastPos.y;
+  lastPos = { x: e.clientX, y: e.clientY };
+  if (moved) lastActive = performance.now();
   const onField = e.target === canvas;
   engine.setPointer(e.clientX, e.clientY, onField && state.interact);
   const now = performance.now();
