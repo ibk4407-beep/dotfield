@@ -9,7 +9,7 @@ const norm = (x, y, z) => { const l = Math.hypot(x, y, z) || 1; return [x / l, y
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
 // A tube of radius `rad` around a closed curve c(s), s in 0..1.
-function tube(curve, rad, radMod) {
+export function tube(curve, rad, radMod) {
   return (u, v, t) => {
     const e = 1e-3, p = curve(u, t), q = curve(u + e, t);
     const T = norm(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
@@ -124,7 +124,7 @@ const SHAPES = {
 };
 
 // Several closed pieces sharing one u range (u is split evenly between them).
-function parts(fns) {
+export function parts(fns) {
   return (u, v, t) => {
     const k = Math.min(fns.length - 1, Math.floor(u * fns.length));
     return fns[k](u * fns.length - k, v, t);
@@ -139,6 +139,9 @@ function fibSphere(n) {
   }
   return out;
 }
+
+// twoSided may be a function of u, for shapes made of open and closed parts.
+const sided = (ts, u) => (typeof ts === "function" ? ts(u) : !!ts);
 
 // Samples a shape into positions and outward-ish normals.
 function sample(def, t) {
@@ -159,9 +162,12 @@ function sample(def, t) {
       const v = j / def.V + (def.open ? 0 : (i % 2) * (0.5 / def.V));
       const p = def.f(u, v, t);
       const pu = def.f(u + e, v, t), pv = def.f(u, v + e, t);
+      if (def.keep && !def.keep(p, u)) continue;
       let n = norm(...cross([pu[0] - p[0], pu[1] - p[1], pu[2] - p[2]], [pv[0] - p[0], pv[1] - p[1], pv[2] - p[2]]));
-      // Point normals away from the shape's centre so lighting is consistent.
-      if (n[0] * p[0] + n[1] * p[1] + n[2] * p[2] < 0 && !def.twoSided) n = [-n[0], -n[1], -n[2]];
+      // Point normals away from the shape's centre so lighting is consistent, unless the
+      // parametrisation already fixes the side (orient = ±1).
+      if (def.orient) n = [n[0] * def.orient, n[1] * def.orient, n[2] * def.orient];
+      else if (n[0] * p[0] + n[1] * p[1] + n[2] * p[2] < 0 && !sided(def.twoSided, u)) n = [-n[0], -n[1], -n[2]];
       pos.push(p); nrm.push(n); uv.push([u, v]);
     }
   }
@@ -194,10 +200,11 @@ function render(P, S, A, rot, scale, twoSided, accentFn) {
     [ny, nz] = [ny * cx - nz * sx, ny * sx + nz * cx];
     [x, z] = [x * cy + z * sy, -x * sy + z * cy];
     [nx, nz] = [nx * cy + nz * sy, -nx * sy + nz * cy];
-    if (twoSided && nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+    const two = sided(twoSided, uv[i][0]);
+    if (two && nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
     const persp = 1 / (1 - z * 0.16);
     const lam = clamp(-nx * 0.35 - ny * 0.75 + nz * 0.55, 0, 1);
-    const facing = twoSided ? z > -0.35 : nz > -0.15;
+    const facing = two ? z > -0.35 : nz > -0.15;
     const s = dot * persp * (facing ? 0.3 + 0.7 * lam : 0.22);
     const tone = accentFn && facing && accentFn(uv[i][0], uv[i][1], t) ? T_A : !facing ? T_DIM : lam > 0.45 ? T_B : T_C;
     P.push(A.w / 2 + x * size * persp, A.h / 2 + y * size * persp, s, tone);
@@ -205,15 +212,15 @@ function render(P, S, A, rot, scale, twoSided, accentFn) {
 }
 
 class ObjectScene {
-  constructor(key) {
+  constructor(def) {
     this.free = true;
-    this.key = key;
-    this.def = SHAPES[key];
+    this.base = this.def = def;
     this.P = new Points(8192);
   }
   init(A) {
     // Thumbnails don't need full resolution.
-    if (A.thumb) this.def = { ...SHAPES[this.key], U: Math.round((SHAPES[this.key].U || 0) * 0.6), V: Math.max(8, Math.round((SHAPES[this.key].V || 0) * 0.65)), sphere: SHAPES[this.key].sphere && Math.round(SHAPES[this.key].sphere * 0.45) };
+    const b = this.base;
+    if (A.thumb) this.def = { ...b, U: Math.round((b.U || 0) * 0.6), V: Math.max(8, Math.round((b.V || 0) * 0.65)), sphere: b.sphere && Math.round(b.sphere * 0.45) };
     this.S = sample(this.def, 0);
     this.acT = 0;
   }
@@ -226,7 +233,7 @@ class ObjectScene {
   points(A) {
     const t = A.t;
     this.P.reset();
-    render(this.P, this.S, A, [1.0 + Math.sin(t * 0.13) * 0.4 + this.sy * 0.4, t * 0.18 + this.sx * 0.6], this.def.scale, this.def.twoSided, this.def.accent);
+    render(this.P, this.S, A, [(this.def.tilt ?? 1.0) + Math.sin(t * 0.13) * 0.4 + this.sy * 0.4, t * 0.18 + this.sx * 0.6], this.def.scale, this.def.twoSided, this.def.accent);
     return this.P;
   }
 }
@@ -298,6 +305,9 @@ const NAMES = {
 };
 
 export const OBJECTS = [
-  ...Object.keys(NAMES).map((k) => ({ id: k, name: NAMES[k], icon: ICONS[k], make: () => new ObjectScene(k) })),
+  ...Object.keys(NAMES).map((k) => ({ id: k, name: NAMES[k], icon: ICONS[k], make: () => new ObjectScene(SHAPES[k]) })),
   { id: "morph", name: "Morph", icon: ICONS.morph, make: () => new Morph() },
 ];
+
+// For other modules: a lit, tumbling scene from any shape definition.
+export const objectScene = (def) => new ObjectScene(def);

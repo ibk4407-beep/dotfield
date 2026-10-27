@@ -1,4 +1,4 @@
-import { check, parse, SCENE_IDS, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "../public/formula.js";
+import { check, parse, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "../public/formula.js";
 
 const SHAPES = ["square", "circle"];
 const STYLES = ["halftone", "dither"];
@@ -114,7 +114,8 @@ function sanitizeConfig(raw) {
     ? { name: String(raw.formula.name || "AI").slice(0, 40), expr: raw.formula.expr.trim(), surface: SURFACES.includes(raw.formula.surface) ? raw.formula.surface : "flat" }
     : null;
   return {
-    scene: SCENE_IDS.includes(raw.scene) ? raw.scene : formula ? "ai" : "torus",
+    // Unknown ids fall back to the default scene on the client.
+    scene: typeof raw.scene === "string" && /^[a-z][a-z0-9]{0,23}$/.test(raw.scene) ? raw.scene : formula ? "ai" : "torus",
     formula,
     palette: typeof raw.palette === "string" ? raw.palette.slice(0, 24) : "custom",
     name: typeof raw.name === "string" ? raw.name.slice(0, 40) : "",

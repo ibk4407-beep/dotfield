@@ -1,13 +1,6 @@
 // A tiny, sandboxed expression language for dot patterns (used by the AI and by built-in scenes).
 // Only numbers, whitelisted variables/functions and operators exist, so a formula can't reach the page.
 
-export const SCENE_IDS = [
-  "torus", "knot", "mobius", "twist", "gyro", "coil", "blob", "shell", "orb", "morph",
-  "chain", "borromean", "horn", "star", "wind", "slinky", "klein", "pearls", "ribbon", "ripple",
-  "globe", "terrain", "galaxy", "silk", "rings", "moon", "aura", "helix", "harmono",
-  "koi", "wave", "rain", "flow", "life", "stars", "matrix", "fireworks", "boids", "snow",
-  "plasma", "tunnel", "spiral", "pulse", "kaleido", "cloud",
-];
 export const CLOCK_STYLES = ["light", "serif", "grotesk", "condensed", "mono", "orbit", "analog", "railway", "ring", "seg", "dot", "word", "progress", "binary", "full"];
 export const CLOCK_POS = ["bl", "br", "center"];
 export const CLOCK_SIZES = ["s", "m", "l"];

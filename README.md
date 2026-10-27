@@ -6,8 +6,12 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 45 シーン
+- 常駐ドットフィールド 146 シーン
   - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
+  - Forms 40 種: Umbilic / Cyclide / Boy / Enneper / Helicat / トーラス結び目 / 超公式シェイプ ほか（Objects と同じ描画の曲面）
+  - Orbits 19 種: Lorenz / Aizawa / Thomas などのストレンジアトラクタ、Hopf 束、Currents / Vortex / Swarm ほか（奥行きで陰影をつけた 3D 点群）
+  - Lines 21 種: Spiro / Rose / Sunflower / Moiré / Pendulum / Ridges / Hilbert ほか（ドットで描く 2D 図形）
+  - Op-art 21 種: Riley / Quasi / Contour / Tiles / Weave ほか（細かいピッチのハーフトーン）
   - Studio: Globe / Terrain / Galaxy / Silk / Rings / Moon / Aura / Helix / Harmono（3D に配置したドット、細かいピッチのハーフトーン、隠線処理）
   - Classic: Koi / Swell / Rain / Flow / Life ほか 16 種（各ドットはパレットの 4 色にスナップ、スプリングで反応）
 - レンダリング: ハーフトーン（サイズ）/ ディザ（1-bit）、円 / 四角
@@ -34,6 +38,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
 - `public/` 静的フロントエンド（ビルド不要の ES Modules）
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
   - `objects.js` Objects シーン（パラメトリック曲面）
+  - `gallery.js` Forms / Orbits / Lines / Op-art
   - `scenes3d.js` Studio シーン（3D・自由配置のドット）
   - `scenes.js` Classic シーン
   - `formula.js` パターン式の言語（パーサー、コンパイラー、検証）

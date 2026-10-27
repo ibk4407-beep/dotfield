@@ -2,10 +2,11 @@ import { Engine, drawDots, drawFree, hexToRgb } from "./engine.js";
 import { CATALOG as CLASSIC, AI_ICON, Formula } from "./scenes.js";
 import { STUDIO, FormulaSurface } from "./scenes3d.js";
 import { OBJECTS } from "./objects.js";
+import { GALLERY } from "./gallery.js";
 import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
 
-const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
 const CLOCK_LABELS = { light: "Light", orbit: "Orbit", dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
@@ -330,9 +331,8 @@ function addThumb(canvas, make) {
   const low = document.createElement("canvas");
   low.width = cols; low.height = rows;
   const A = { thumb: true, cols, rows, w: canvas.width, h: canvas.height, cell: Math.max(2.6, canvas.width / 80), t: Math.random() * 10, pal: engine.A.pal, rgb: engine.A.rgb, pointer: { x: -99, y: -99, px: -99, py: -99, active: false }, ripples: [] };
-  let scene;
-  try { scene = make(); scene.init(A); } catch { return; }
-  thumbs.set(canvas, { scene, A, low, lctx: low.getContext("2d", { willReadFrequently: true }), ctx: canvas.getContext("2d"), cell });
+  // The scene is built the first time its card scrolls into view.
+  thumbs.set(canvas, { make, scene: null, A, low, lctx: low.getContext("2d", { willReadFrequently: true }), ctx: canvas.getContext("2d"), cell });
   if (!thumbTimer) { thumbLast = performance.now(); thumbTimer = setInterval(tickThumbs, 1000 / 24); }
 }
 function clearThumbs(filter = () => true) {
@@ -352,6 +352,9 @@ function tickThumbs() {
     if (!canvas.isConnected) { thumbs.delete(canvas); continue; }
     const r = canvas.getBoundingClientRect();
     if (r.bottom < 0 || r.top > innerHeight || !r.width) continue;
+    if (!th.scene) {
+      try { th.scene = th.make(); th.scene.init(th.A); } catch { thumbs.delete(canvas); continue; }
+    }
     const dt = Math.min(0.25, (now - (th.last || now)) / 1000) * state.speed;
     th.last = now;
     th.A.t += dt;
@@ -370,7 +373,7 @@ function tickThumbs() {
 }
 
 /* ---------- Scene panel ---------- */
-const sceneGrid = $("#sceneGrid"), aiSceneGrid = $("#aiSceneGrid");
+const aiSceneGrid = $("#aiSceneGrid");
 function card(entry, i, deletable) {
   return `<button class="scene-card" data-id="${entry.id}" style="--i:${i}" aria-pressed="${entry.id === state.scene}">
     <canvas></canvas><span class="nm">${escapeHtml(entry.name)}<small>${i < 9 && !deletable ? i + 1 : ""}</small></span>
@@ -380,9 +383,10 @@ function card(entry, i, deletable) {
 function renderSceneGrids() {
   if (!panels.scenes.classList.contains("open")) return;
   clearThumbs((c) => c.closest("#panelScenes"));
-  $("#objectGrid").innerHTML = CATALOG.filter((e) => e.group === "objects").map((e, i) => card(e, i, false)).join("");
-  sceneGrid.innerHTML = CATALOG.filter((e) => e.group === "studio").map((e, i) => card(e, i + 10, false).replace(/<small>\d*<\/small>/, "<small></small>")).join("");
-  $("#classicGrid").innerHTML = CATALOG.filter((e) => e.group === "classic").map((e, i) => card(e, i + 20, false).replace(/<small>\d*<\/small>/, "<small></small>")).join("");
+  // Only the first nine objects carry a number key.
+  for (const grid of $$("#panelScenes [data-group]")) {
+    grid.innerHTML = CATALOG.filter((e) => e.group === grid.dataset.group).map((e, i) => card(e, grid.dataset.group === "objects" ? i : 99, false)).join("");
+  }
   const custom = state.customScenes.map((c) => sceneEntry(c.id));
   $("#aiScenesField").hidden = !custom.length;
   aiSceneGrid.innerHTML = custom.map((e, i) => card(e, i, true)).join("");
