@@ -6,8 +6,9 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 146 シーン
+- 常駐ドットフィールド 176 シーン
   - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
+  - Motion 30 種: 回転させず、仕組みそのものが動くシーン。反応拡散（Coral / Mitosis / Fingerprint）、波紋（Pond）、セル・オートマトン（Cyclic / Rule / Ant）、砂（Sand）、ゴルトンボード、結晶成長、育つ木（Sapling）、同期するホタル、渋滞（Traffic）、風になびく布（Curtain）、ソート・迷路・スライドパズルの実演、メタボール、ボロノイ、砂鉄、流線、遠景スクロール、心電図、潮、横断歩道、雷雨 ほか
   - Forms 40 種: Umbilic / Cyclide / Boy / Enneper / Helicat / トーラス結び目 / 超公式シェイプ ほか（Objects と同じ描画の曲面）
   - Orbits 19 種: Lorenz / Aizawa / Thomas などのストレンジアトラクタ、Hopf 束、Currents / Vortex / Swarm ほか（奥行きで陰影をつけた 3D 点群）
   - Lines 21 種: Spiro / Rose / Sunflower / Moiré / Pendulum / Ridges / Hilbert ほか（ドットで描く 2D 図形）
@@ -38,6 +39,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
 - `public/` 静的フロントエンド（ビルド不要の ES Modules）
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
   - `objects.js` Objects シーン（パラメトリック曲面）
+  - `motion.js` Motion シーン（シミュレーションと過程）
   - `gallery.js` Forms / Orbits / Lines / Op-art
   - `scenes3d.js` Studio シーン（3D・自由配置のドット）
   - `scenes.js` Classic シーン

@@ -3,10 +3,11 @@ import { CATALOG as CLASSIC, AI_ICON, Formula } from "./scenes.js";
 import { STUDIO, FormulaSurface } from "./scenes3d.js";
 import { OBJECTS } from "./objects.js";
 import { GALLERY } from "./gallery.js";
+import { MOTION } from "./motion.js";
 import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
 
-const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...MOTION, ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
 const CLOCK_LABELS = { light: "Light", orbit: "Orbit", dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
