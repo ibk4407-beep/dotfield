@@ -5,11 +5,12 @@ import { OBJECTS } from "./objects.js";
 import { GALLERY } from "./gallery.js";
 import { MOTION } from "./motion.js";
 import { SOUND } from "./sound.js";
+import { SATIN } from "./satin.js";
 import { sound } from "./audio.js";
 import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
 
-const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...SOUND, ...MOTION, ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...SATIN, ...SOUND, ...MOTION, ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
 const CLOCK_LABELS = { light: "Light", orbit: "Orbit", dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
@@ -376,6 +377,11 @@ function tickThumbs() {
     const dt = Math.min(0.25, (now - (th.last || now)) / 1000) * state.speed;
     th.last = now;
     th.A.t += dt;
+    if (th.scene.paint) {
+      th.scene.update(dt, th.A);
+      th.scene.paint(th.ctx, th.A);
+      continue;
+    }
     if (th.scene.free) {
       th.scene.update(dt, th.A);
       drawFree(th.ctx, th.scene.points(th.A), th.A.w, th.A.h, engine.A.rgb, state.shape);

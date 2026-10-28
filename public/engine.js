@@ -303,7 +303,7 @@ export class Engine {
 
   step(now) {
     this.lastDraw = now;
-    const dt = Math.min(0.05, (now - this.last) / 1000);
+    const dt = Math.max(0, Math.min(0.05, (now - this.last) / 1000));
     this.last = now;
     if (!this.scene) return;
     const snd = this.sound;
@@ -342,7 +342,11 @@ export class Engine {
     this.overlayK += (this.overlayTarget - this.overlayK) * Math.min(1, dt * 3.5);
     if (this.overlayK > 0.005) this.updateMask();
 
-    if (this.scene.free) {
+    if (this.scene.paint) {
+      // Scenes with their own renderer (WebGL) paint the whole view themselves.
+      this.scene.update(sdt, A);
+      this.scene.paint(this.ctx, A, this);
+    } else if (this.scene.free) {
       this.scene.update(sdt, A);
       this.renderFree(this.scene.points(A), dt);
     } else {

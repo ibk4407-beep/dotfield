@@ -6,8 +6,9 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 185 シーン
+- 常駐ドットフィールド 187 シーン
   - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
+  - Satin 2 種: Satin（WebGL のカラー描画）/ Satin Dots（同じ布をドットで）。低音で布のうねりが大きくなり、拍ごとに波が走る
   - Sound 9 種: Spectrum / Mirror / Scope / Ring / Donut / Waterfall / Horizon / Burst / Radial（音のスペクトラム・波形・拍から描く。未接続時は穏やかなダミー信号で動く）
   - Motion 30 種: 回転させず、仕組みそのものが動くシーン。反応拡散（Coral / Mitosis / Fingerprint）、波紋（Pond）、セル・オートマトン（Cyclic / Rule / Ant）、砂（Sand）、ゴルトンボード、結晶成長、育つ木（Sapling）、同期するホタル、渋滞（Traffic）、風になびく布（Curtain）、ソート・迷路・スライドパズルの実演、メタボール、ボロノイ、砂鉄、流線、遠景スクロール、心電図、潮、横断歩道、雷雨 ほか
   - Forms 40 種: Umbilic / Cyclide / Boy / Enneper / Helicat / トーラス結び目 / 超公式シェイプ ほか（Objects と同じ描画の曲面）
@@ -43,6 +44,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
   - `objects.js` Objects シーン（パラメトリック曲面）
   - `audio.js` 音声の取得と解析（帯域・スペクトラム・波形・拍検出）
+  - `satin.js` Satin シーン（WebGL シェーダーと共通の高さ場）
   - `sound.js` Sound シーン
   - `motion.js` Motion シーン（シミュレーションと過程）
   - `gallery.js` Forms / Orbits / Lines / Op-art
