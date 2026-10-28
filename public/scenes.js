@@ -637,12 +637,23 @@ export class Formula {
     const d = this.img.data, ca = A.rgb.a, cb = A.rgb.b, cc = A.rgb.c, fn = this.fn;
     const aspect = cols / rows, P = A.pointer;
     const mx = P.active ? (P.x / (cols - 1) * 2 - 1) * aspect : 0, my = P.active ? P.y / (rows - 1) * 2 - 1 : 0;
+    // Each dot's radius and angle depend only on the grid, so they're worked out once per size.
+    if (this.polarKey !== cols + "x" + rows) {
+      this.polarKey = cols + "x" + rows;
+      this.polar = new Float64Array(cols * rows * 2);
+      for (let j = 0; j < cols * rows; j++) {
+        const u = (((j % cols) / (cols - 1)) * 2 - 1) * aspect, v = (((j / cols) | 0) / (rows - 1)) * 2 - 1;
+        this.polar[j * 2] = Math.sqrt(u * u + v * v);
+        this.polar[j * 2 + 1] = Math.atan2(v, u);
+      }
+    }
+    const pol = this.polar;
     for (let y = 0; y < rows; y++) {
       const v = (y / (rows - 1)) * 2 - 1;
       for (let x = 0; x < cols; x++) {
         const u = ((x / (cols - 1)) * 2 - 1) * aspect;
         const j = y * cols + x, i = j * 4;
-        let val = fn(x, y, u, v, Math.sqrt(u * u + v * v), Math.atan2(v, u), t, j, cols, rows, mx, my);
+        let val = fn(x, y, u, v, pol[j * 2], pol[j * 2 + 1], t, j, cols, rows, mx, my);
         if (!(val === val)) val = 0;
         if (val > 1) val = 1; else if (val < -1) val = -1;
         const m = val < 0 ? -val : val;

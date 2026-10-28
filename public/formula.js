@@ -20,17 +20,31 @@ const MAX_LEN = 320;
 const fract = (x) => x - Math.floor(x);
 const hash = (x, y = 0) => fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453);
 const hash3 = (x, y, z) => fract(Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453);
+// A frame of dots reads the same few lattice corners thousands of times, so corner hashes are
+// remembered (same values as hash3, just not recomputed).
+const corners = new Map();
+const corner = (x, y, z) => {
+  const k = x * 4194304 + y * 2048 + z;
+  let h = corners.get(k);
+  if (h === undefined) {
+    if (corners.size > 8192) corners.clear();
+    h = hash3(x, y, z);
+    corners.set(k, h);
+  }
+  return h;
+};
 function noise(x, y, z = 0) {
   const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
   const xf = x - xi, yf = y - yi, zf = z - zi;
   const sx = xf * xf * (3 - 2 * xf), sy = yf * yf * (3 - 2 * yf), sz = zf * zf * (3 - 2 * zf);
-  const l = (a, b, t) => a + (b - a) * t;
-  const c = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz);
-  return l(
-    l(l(c(0, 0, 0), c(1, 0, 0), sx), l(c(0, 1, 0), c(1, 1, 0), sx), sy),
-    l(l(c(0, 0, 1), c(1, 0, 1), sx), l(c(0, 1, 1), c(1, 1, 1), sx), sy),
-    sz
-  );
+  // Corner hashes are only cached for lattice points in a sane range; anything else is computed.
+  const c = Math.abs(xi) < 1000 && Math.abs(yi) < 1000 && Math.abs(zi) < 1000 ? corner : hash3;
+  const c000 = c(xi, yi, zi), c100 = c(xi + 1, yi, zi), c010 = c(xi, yi + 1, zi), c110 = c(xi + 1, yi + 1, zi);
+  const c001 = c(xi, yi, zi + 1), c101 = c(xi + 1, yi, zi + 1), c011 = c(xi, yi + 1, zi + 1), c111 = c(xi + 1, yi + 1, zi + 1);
+  const a0 = c000 + (c100 - c000) * sx, b0 = c010 + (c110 - c010) * sx;
+  const a1 = c001 + (c101 - c001) * sx, b1 = c011 + (c111 - c011) * sx;
+  const z0 = a0 + (b0 - a0) * sy, z1 = a1 + (b1 - a1) * sy;
+  return z0 + (z1 - z0) * sz;
 }
 export const H = {
   fract, hash, noise,

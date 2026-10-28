@@ -796,11 +796,12 @@ const metaballs = scene({
   init(A) { return { ...lattice(A, 0.8), balls: Array.from({ length: 6 }, (_, k) => ({ a: 0.13 + k * 0.037, b: 0.17 + k * 0.029, ph: k * 1.7, r: 0.1 + (k % 3) * 0.03 })) }; },
   step() {},
   draw(P, A, S) {
-    const m = min(A.w, A.h), B = S.balls.map((b) => [A.w / 2 + sin(S.t * b.a + b.ph) * A.w * 0.32, A.h / 2 + sin(S.t * b.b + b.ph * 1.3) * A.h * 0.3, (b.r * m) ** 2]);
+    const m = min(A.w, A.h), B = new Float64Array(S.balls.length * 3);
+    S.balls.forEach((b, k) => { B[k * 3] = A.w / 2 + sin(S.t * b.a + b.ph) * A.w * 0.32; B[k * 3 + 1] = A.h / 2 + sin(S.t * b.b + b.ph * 1.3) * A.h * 0.3; B[k * 3 + 2] = (b.r * m) ** 2; });
     for (let y = 0; y < S.rows; y++) for (let x = 0; x < S.cols; x++) {
       const px = S.ox + x * S.p, py = S.oy + y * S.p;
       let f = 0;
-      for (const [bx, by, r2] of B) f += r2 / ((px - bx) ** 2 + (py - by) ** 2 + 1);
+      for (let k = 0; k < B.length; k += 3) { const ex = px - B[k], ey = py - B[k + 1]; f += B[k + 2] / (ex * ex + ey * ey + 1); }
       const q = smooth(0.55, 1.4, f);
       P.push(px, py, S.dot * (0.12 + 0.88 * q), q > 0.92 ? T_B : q > 0.15 ? T_C : T_DIM);
     }

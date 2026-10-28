@@ -12,6 +12,8 @@ export const hexToRgb = (h) => {
 const rgbStr = (c) => `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
 const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 // Interleaved gradient noise: an even, blue-noise-like threshold for 1-bit dithering.
+// a^0.8 for every alpha byte (dot size curve).
+const POW08 = Float32Array.from({ length: 257 }, (_, i) => Math.pow(Math.min(i, 255) / 255, 0.8));
 const ign = (x, y) => { const v = 0.06711056 * x + 0.00583715 * y; return (52.9829189 * (v - Math.floor(v))) % 1; };
 
 const KEYS = ["bg", "base", "a", "b", "c"];
@@ -374,21 +376,34 @@ export class Engine {
   renderFree(P, dt) {
     const { ctx, cols, rows, cell, cur } = this;
     const circle = this.shape === "circle";
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.fillStyle = rgbStr(cur.bg);
-    ctx.fillRect(0, 0, this.w, this.h);
-    const half = cell / 2;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.scene.grid !== false) {
-      // A whisper of the dot grid keeps free scenes part of the same field.
-      ctx.fillStyle = rgbStr(cur.base);
-      ctx.beginPath();
-      const s = cell * 0.09;
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const cx = x * cell + half, cy = y * cell + half;
-        if (circle) { ctx.moveTo(cx + s, cy); ctx.arc(cx, cy, s, 0, 6.2832); } else ctx.rect(cx - s, cy - s, s * 2, s * 2);
+      // A whisper of the dot grid keeps free scenes part of the same field. It only changes
+      // with the size or colours, so it is drawn once and copied each frame.
+      const key = [cols, rows, cell, circle, this.canvas.width, this.canvas.height, rgbStr(cur.bg), rgbStr(cur.base)].join();
+      const G = this.gridCache || (this.gridCache = document.createElement("canvas"));
+      if (this.gridKey !== key) {
+        this.gridKey = key;
+        G.width = this.canvas.width; G.height = this.canvas.height;
+        const g = G.getContext("2d");
+        g.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        g.fillStyle = rgbStr(cur.bg);
+        g.fillRect(0, 0, this.w, this.h);
+        g.fillStyle = rgbStr(cur.base);
+        g.beginPath();
+        const s = cell * 0.09, half = cell / 2;
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+          const cx = x * cell + half, cy = y * cell + half;
+          if (circle) { g.moveTo(cx + s, cy); g.arc(cx, cy, s, 0, 6.2832); } else g.rect(cx - s, cy - s, s * 2, s * 2);
+        }
+        g.fill();
       }
-      ctx.fill();
+      ctx.drawImage(G, 0, 0);
+    } else {
+      ctx.fillStyle = rgbStr(cur.bg);
+      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const pz = this.pulse;
     if (pz) {
       // Zoom about the centre so the whole picture breathes.
@@ -419,8 +434,16 @@ export class Engine {
     const counts = [0, 0, 0, 0, 0];
     const pz = this.pulse;
     const baseSize = cell * 0.13 * (pz ? 1 + pz.base * 0.9 : 1), sizeK = pz ? pz.size : 1;
+    // With no cursor, no ripples and every dot back at rest, the springs have nothing to do.
+    const springs = hov || rip.length > 0 || !this.settled;
+    let motion = 0;
+    // sin(x·0.18 + y·0.12 − t·0.8) split into per-column and per-row parts, so the swell costs
+    // two multiplies per dot instead of a sine.
+    const SC = this.swellCol && this.swellCol.length === cols * 2 ? this.swellCol : (this.swellCol = new Float32Array(cols * 2));
+    for (let x = 0; x < cols; x++) { SC[x * 2] = Math.sin(x * 0.18); SC[x * 2 + 1] = Math.cos(x * 0.18); }
 
     for (let y = 0; y < rows; y++) {
+      const sy = Math.sin(y * 0.12 - t * 0.8), cy = Math.cos(y * 0.12 - t * 0.8);
       for (let x = 0; x < cols; x++) {
         const j = y * cols + x, i = j * 4;
         let a = d[i + 3] / 255, r = d[i], g = d[i + 1], b = d[i + 2];
@@ -437,42 +460,46 @@ export class Engine {
         let tone = -1;
 
         // Breathing: a slow diagonal swell keeps the empty field alive.
-        const swell = 0.5 + 0.5 * Math.sin(x * 0.18 + y * 0.12 - t * 0.8);
+        const swell = 0.5 + 0.5 * (SC[x * 2] * cy + SC[x * 2 + 1] * sy);
         let target;
         if (a < 0.05 || (dither && a < TH[j])) { tone = T_BASE; target = baseSize * (0.85 + 0.35 * swell); }
         else {
           tone = nearestTone(r, g, b, CA, CB, CC);
-          target = (dither ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8))) * sizeK;
+          target = (dither ? cell * 0.66 : cell * (0.2 + 0.7 * POW08[(a * 255 + 0.5) | 0])) * sizeK;
         }
 
         // Springs: the cursor pushes dots aside, click shockwaves throw them outward.
-        let fx = -K * OX[j], fy = -K * OY[j];
-        if (hov) {
-          const ex = x - P.x, ey = y - P.y, dd = Math.sqrt(ex * ex + ey * ey);
-          if (dd < RP && dd > 0.001) {
-            const f = (1 - dd / RP) ** 2;
-            fx += (ex / dd) * f * 46;
-            fy += (ey / dd) * f * 46;
-            target *= 1 + 0.55 * f;
-            if (tone === T_BASE && f > 0.25) tone = T_DIM;
+        if (springs) {
+          let fx = -K * OX[j], fy = -K * OY[j];
+          if (hov) {
+            const ex = x - P.x, ey = y - P.y, dd = Math.sqrt(ex * ex + ey * ey);
+            if (dd < RP && dd > 0.001) {
+              const f = (1 - dd / RP) ** 2;
+              fx += (ex / dd) * f * 46;
+              fy += (ey / dd) * f * 46;
+              target *= 1 + 0.55 * f;
+              if (tone === T_BASE && f > 0.25) tone = T_DIM;
+            }
           }
-        }
-        for (let q = 0; q < rip.length; q++) {
-          const R = rip[q];
-          const ex = x - R.x, ey = y - R.y, dd = Math.sqrt(ex * ex + ey * ey);
-          const z = (dd - R.r) / R.w;
-          if (z > -2.5 && z < 2.5 && dd > 0.001) {
-            const e = Math.exp(-z * z) * R.life * R.amp;
-            fx += (ex / dd) * e * 160;
-            fy += (ey / dd) * e * 160;
-            target *= 1 + 0.5 * e;
+          for (let q = 0; q < rip.length; q++) {
+            const R = rip[q];
+            const ex = x - R.x, ey = y - R.y, dd = Math.sqrt(ex * ex + ey * ey);
+            const z = (dd - R.r) / R.w;
+            if (z > -2.5 && z < 2.5 && dd > 0.001) {
+              const e = Math.exp(-z * z) * R.life * R.amp;
+              fx += (ex / dd) * e * 160;
+              fy += (ey / dd) * e * 160;
+              target *= 1 + 0.5 * e;
+            }
           }
+          let vx = VX[j] + (fx - DAMP * VX[j]) * dt, vy = VY[j] + (fy - DAMP * VY[j]) * dt;
+          let ox = OX[j] + vx * dt, oy = OY[j] + vy * dt;
+          if (ox > 1.2) ox = 1.2; else if (ox < -1.2) ox = -1.2;
+          if (oy > 1.2) oy = 1.2; else if (oy < -1.2) oy = -1.2;
+          VX[j] = vx; VY[j] = vy; OX[j] = ox; OY[j] = oy;
+          const m = (ox < 0 ? -ox : ox) + (oy < 0 ? -oy : oy) + ((vx < 0 ? -vx : vx) + (vy < 0 ? -vy : vy)) * 0.05;
+          if (m > motion) motion = m;
         }
-        let vx = VX[j] + (fx - DAMP * VX[j]) * dt, vy = VY[j] + (fy - DAMP * VY[j]) * dt;
-        let ox = OX[j] + vx * dt, oy = OY[j] + vy * dt;
-        if (ox > 1.2) ox = 1.2; else if (ox < -1.2) ox = -1.2;
-        if (oy > 1.2) oy = 1.2; else if (oy < -1.2) oy = -1.2;
-        VX[j] = vx; VY[j] = vy; OX[j] = ox; OY[j] = oy;
 
         if (target > cell * 0.95) target = cell * 0.95;
         S[j] += (target - S[j]) * ease;
@@ -480,8 +507,14 @@ export class Engine {
       }
     }
 
+    if (springs && !hov && !rip.length && motion < 0.003) {
+      // Snap the last fraction of a pixel home so the next frames can skip the springs.
+      OX.fill(0); OY.fill(0); VX.fill(0); VY.fill(0);
+      this.settled = true;
+    } else if (springs) this.settled = false;
+
     const fills = fillsOf(cur);
-    const half = cell / 2;
+    const half = cell / 2, tiny = 1.1 / this.dpr;
     for (let gI = 0; gI < 5; gI++) {
       const n = counts[gI];
       if (!n) continue;
@@ -491,8 +524,10 @@ export class Engine {
       for (let q = 0; q < n; q++) {
         const j = arr[q], x = j % cols, y = (j / cols) | 0;
         const cx = x * cell + half + OX[j] * cell, cy = y * cell + half + OY[j] * cell, hs = S[j] / 2;
-        if (circle) { ctx.moveTo(cx + hs, cy); ctx.arc(cx, cy, hs, 0, 6.2832); }
-        else ctx.rect(cx - hs, cy - hs, hs * 2, hs * 2);
+        // Below about a device pixel a circle and a square of the same area look identical,
+        // and the square is far cheaper to rasterise.
+        if (circle && hs > tiny) { ctx.moveTo(cx + hs, cy); ctx.arc(cx, cy, hs, 0, 6.2832); }
+        else { const k = circle ? hs * 0.886 : hs; ctx.rect(cx - k, cy - k, k * 2, k * 2); }
       }
       ctx.fill();
     }

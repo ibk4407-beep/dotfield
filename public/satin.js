@@ -27,7 +27,10 @@ const L1 = (() => { const v = [-0.45, 0.6, 0.66], l = Math.hypot(...v); return v
 const L2 = (() => { const v = [0.3, 0.2, 0.93], l = Math.hypot(...v); return v.map((c) => c / l); })();
 function shade(x, y, asp, U, out) {
   const e = 0.012, h = height(x, y, U);
-  const gx = (height(x + e, y, U) - h) / e, gy = (height(x, y + e, U) - h) / e;
+  return light(x, y, h, (height(x + e, y, U) - h) / e, (height(x, y + e, U) - h) / e, asp, U, out);
+}
+// The lighting for a known height and slope (gx, gy).
+function light(x, y, h, gx, gy, asp, U, out) {
   let nx = -gx * TILT, ny = -gy * TILT, nz = 1;
   const nl = sqrt(nx * nx + ny * ny + 1);
   nx /= nl; ny /= nl; nz /= nl;
@@ -195,8 +198,17 @@ const silkDots = () => ({
     const d = this.img.data, { a, b, c } = A.rgb, o = this.o;
     // Grid scenes are laid out in cells; the cloth is shaded against the visible view.
     const vw = A.thumb ? cols : A.w / A.cell, vh = A.thumb ? rows : A.h / A.cell, asp = vw / vh;
+    // Heights are sampled once per dot (plus one extra column and row) and the slope is read
+    // from the neighbours, rather than evaluating the field three times per dot.
+    const W = cols + 1, st = 2 / vh, U = this.U;
+    if (!this.hf || this.hf.length !== W * (rows + 1)) this.hf = new Float32Array(W * (rows + 1));
+    const hf = this.hf;
+    for (let y = -1; y < rows; y++) for (let x = 0; x <= cols; x++) {
+      hf[(y + 1) * W + x] = height(((x + 0.5 - vw / 2) / vh) * 2, ((vh / 2 - y - 0.5) / vh) * 2, U);
+    }
     for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-      shade(((x + 0.5 - vw / 2) / vh) * 2, ((vh / 2 - y - 0.5) / vh) * 2, asp, this.U, o);
+      const k = (y + 1) * W + x, h = hf[k];
+      light(((x + 0.5 - vw / 2) / vh) * 2, ((vh / 2 - y - 0.5) / vh) * 2, h, (hf[k + 1] - h) / st, (hf[k - W] - h) / st, asp, U, o);
       const v = clamp((o.body * 1.1 + o.rim + o.spec) * o.cover, 0, 1);
       const q = (y * cols + x) * 4;
       const col = o.rim > 0.2 && o.rim >= o.spec ? a : o.spec > 0.3 ? b : c;
