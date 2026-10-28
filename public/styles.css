@@ -454,6 +454,15 @@ body.fs #btnFull .ic-exit, body.fs #dbFull .ic-exit { display: block; }
   transform: scale(0.6);
   transition: opacity 0.2s, transform 0.35s var(--spring);
 }
+.pic-head { align-items: center; }
+.pic-head .seg.small { width: auto; }
+.pic-head .seg.small .seg-btn { flex: none; width: auto; height: 30px; padding-inline: 12px; white-space: nowrap; }
+.add-card .add-face {
+  display: grid; place-items: center; align-content: center; gap: 6px; width: 100%; aspect-ratio: 16 / 10;
+  border-radius: 14px; border: 1.5px dashed var(--ink-3); color: var(--ink-2); font-size: 11.5px; font-weight: 600;
+}
+.add-card .add-face svg { width: 22px; height: 22px; }
+body.dropping #field { filter: brightness(1.08); }
 .scene-card .del svg { width: 13px; height: 13px; }
 .scene-card:hover .del { opacity: 1; transform: none; }
 

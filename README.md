@@ -6,7 +6,8 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 187 シーン
+- 常駐ドットフィールド 187 シーン ＋ 自分の画像
+  - Pictures: 読み込んだ画像をドットに変換（ドラッグ＆ドロップ・貼り付け・ファイル選択）。元の色 / パレット色を切り替え、組み上がり・呼吸・マウスで散る・音で脈打つ。画像はブラウザ内（localStorage）にだけ保存し、共有リンクには含めない
   - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
   - Satin 2 種: Satin（WebGL のカラー描画）/ Satin Dots（同じ布をドットで）。低音で布のうねりが大きくなり、拍ごとに波が走る
   - Sound 9 種: Spectrum / Mirror / Scope / Ring / Donut / Waterfall / Horizon / Burst / Radial（音のスペクトラム・波形・拍から描く。未接続時は穏やかなダミー信号で動く）
@@ -44,6 +45,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
   - `objects.js` Objects シーン（パラメトリック曲面）
   - `audio.js` 音声の取得と解析（帯域・スペクトラム・波形・拍検出）
+  - `picture.js` Pictures（画像の保存・ドット変換・描画）
   - `satin.js` Satin シーン（WebGL シェーダーと共通の高さ場）
   - `sound.js` Sound シーン
   - `motion.js` Motion シーン（シミュレーションと過程）

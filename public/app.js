@@ -6,6 +6,7 @@ import { GALLERY } from "./gallery.js";
 import { MOTION } from "./motion.js";
 import { SOUND } from "./sound.js";
 import { SATIN } from "./satin.js";
+import { pictures, reloadPictures, addPicture, removePicture, picOpts, pictureEntry } from "./picture.js";
 import { sound } from "./audio.js";
 import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
@@ -32,7 +33,7 @@ const DEFAULTS = {
   scene: "torus", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
   theme: "auto", style: "halftone", shape: "circle", clockStyle: "light", clockPos: "bl", clockSize: "m",
   cell: 14, speed: 1, idle: 3, full: true, interact: true,
-  wake: true, burnin: true, eco: false, customScenes: [], react: 1, soundSource: "system",
+  wake: true, burnin: true, eco: false, customScenes: [], react: 1, soundSource: "system", picColor: "original",
 };
 const DISPLAY = new URLSearchParams(location.search).has("display");
 
@@ -89,7 +90,8 @@ function normalize(s) {
     .filter((x) => x && typeof x.id === "string" && typeof x.expr === "string" && /^ai:[a-z0-9]{4,12}$/.test(x.id))
     .slice(0, 16)
     .map((x) => ({ id: x.id, name: String(x.name || "AI").slice(0, 40), expr: x.expr.slice(0, 320), surface: SURFACES.includes(x.surface) ? x.surface : "flat" }));
-  if (!CATALOG.some((x) => x.id === n.scene) && !n.customScenes.some((x) => x.id === n.scene)) n.scene = DEFAULTS.scene;
+  if (!CATALOG.some((x) => x.id === n.scene) && !n.customScenes.some((x) => x.id === n.scene) && !pictures.some((x) => x.id === n.scene)) n.scene = DEFAULTS.scene;
+  if (!["original", "palette"].includes(n.picColor)) n.picColor = "original";
   if (!["auto", "light", "dark"].includes(n.theme)) n.theme = "auto";
   if (!["halftone", "dither"].includes(n.style)) n.style = "halftone";
   if (!["square", "circle"].includes(n.shape)) n.shape = "circle";
@@ -127,11 +129,13 @@ const makeFormula = (expr, surface) => () => (surface && surface !== "flat" ? ne
 function sceneEntry(id = state.scene) {
   const builtin = CATALOG.find((x) => x.id === id);
   if (builtin) return builtin;
+  const pic = pictures.find((x) => x.id === id);
+  if (pic) return pictureEntry(pic);
   const cs = state.customScenes.find((x) => x.id === id);
   if (cs) return { id: cs.id, name: cs.name, icon: AI_ICON, expr: cs.expr + cs.surface, make: makeFormula(cs.expr, cs.surface) };
   return CATALOG[0];
 }
-const allScenes = () => [...CATALOG.map((x) => x.id), ...state.customScenes.map((x) => x.id)];
+const allScenes = () => [...pictures.map((x) => x.id), ...CATALOG.map((x) => x.id), ...state.customScenes.map((x) => x.id)];
 
 let currentSceneKey = null;
 function apply({ instant = false } = {}) {
@@ -147,6 +151,7 @@ function apply({ instant = false } = {}) {
   engine.maxFps = state.eco ? 30 : 60;
   engine.burnin = state.burnin;
   engine.react = state.react;
+  picOpts.color = state.picColor;
   engine.clockStyle = state.clockStyle === "off" ? "light" : state.clockStyle;
   engine.clockPos = state.clockPos;
   engine.clockSize = state.clockSize;
@@ -215,7 +220,7 @@ const bindSeg = (seg, onPick) => seg.addEventListener("click", (e) => {
 });
 
 const clockPosSeg = $("#clockPosSeg"), clockSizeSeg = $("#clockSizeSeg");
-const soundSrcSeg = $("#soundSrcSeg"), reactSeg = $("#reactSeg");
+const soundSrcSeg = $("#soundSrcSeg"), reactSeg = $("#reactSeg"), picColorSeg = $("#picColorSeg");
 const themeSeg = $("#themeSeg"), styleSeg = $("#styleSeg"), shapeSeg = $("#shapeSeg"), idleSeg = $("#idleSeg");
 const cellIn = $("#cell"), speedIn = $("#speed");
 const setRangeFill = (el) => el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
@@ -229,6 +234,7 @@ function syncControls() {
   moveSeg(clockSizeSeg, state.clockSize);
   moveSeg(soundSrcSeg, state.soundSource);
   moveSeg(reactSeg, state.react);
+  moveSeg(picColorSeg, state.picColor);
   $("#optSound").checked = sound.on;
   cellIn.value = state.cell;
   speedIn.value = state.speed;
@@ -256,6 +262,7 @@ bindSeg(soundSrcSeg, (v) => {
   if (sound.on && sound.source && sound.source !== v) startSound();
 });
 bindSeg(reactSeg, (v) => update({ react: +v }));
+bindSeg(picColorSeg, (v) => update({ picColor: v }));
 bindSeg(clockSizeSeg, (v) => { update({ clockSize: v }); previewClock(); });
 
 let customColors = null;
@@ -411,19 +418,29 @@ function renderSceneGrids() {
   for (const grid of $$("#panelScenes [data-group]")) {
     grid.innerHTML = CATALOG.filter((e) => e.group === grid.dataset.group).map((e, i) => card(e, grid.dataset.group === "objects" ? i : 99, false)).join("");
   }
+  $("#picGrid").innerHTML = pictures.map((p, i) => card(pictureEntry(p), i, true)).join("") +
+    `<button class="scene-card add-card" id="picAdd"><span class="add-face">${svg('<path d="M12 5v14M5 12h14"/>')}画像を追加</span><span class="nm">ドロップでも追加</span></button>`;
+  requestAnimationFrame(() => moveSeg(picColorSeg, state.picColor, false));
   const custom = state.customScenes.map((c) => sceneEntry(c.id));
   $("#aiScenesField").hidden = !custom.length;
   aiSceneGrid.innerHTML = custom.map((e, i) => card(e, i, true)).join("");
-  for (const el of $$("#panelScenes .scene-card")) addThumb(el.querySelector("canvas"), sceneEntry(el.dataset.id).make);
+  for (const el of $$("#panelScenes .scene-card[data-id]")) addThumb(el.querySelector("canvas"), sceneEntry(el.dataset.id).make);
 }
 $("#panelScenes").addEventListener("click", (e) => {
   const del = e.target.closest("[data-del]");
   if (del) {
     e.stopPropagation();
     const id = del.dataset.del;
+    if (id.startsWith("pic:")) {
+      removePicture(id);
+      update({ scene: state.scene === id ? DEFAULTS.scene : state.scene });
+      renderSceneGrids();
+      return;
+    }
     update({ customScenes: state.customScenes.filter((x) => x.id !== id), scene: state.scene === id ? "koi" : state.scene });
     return;
   }
+  if (e.target.closest("#picAdd")) { $("#picInput").click(); return; }
   const c = e.target.closest(".scene-card");
   if (c) update({ scene: c.dataset.id });
 });
@@ -612,6 +629,45 @@ sound.onchange = syncSound;
 soundBtn.addEventListener("click", toggleSound);
 $("#optSound").addEventListener("change", (e) => {
   if (e.target.checked !== sound.on) toggleSound();
+});
+
+/* ---------- Pictures ---------- */
+// Images are turned into dots here in the browser and kept in localStorage only.
+async function importPictures(files) {
+  const list = [...files].filter((f) => /^image\//.test(f.type));
+  if (!list.length || DISPLAY) return;
+  let last = null;
+  for (const f of list) {
+    try { last = await addPicture(f); }
+    catch (e) { toast(e && e.message === "quota" ? "保存できる容量を超えました。不要な画像を削除してください" : "画像を読み込めませんでした"); break; }
+  }
+  if (!last) return;
+  update({ scene: last.id });
+  renderSceneGrids();
+  toast(list.length > 1 ? `${list.length} 枚の画像を追加しました` : "画像をドットに変換しました");
+}
+$("#picInput").addEventListener("change", (e) => { importPictures(e.target.files); e.target.value = ""; });
+const hasFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes("Files");
+addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); document.body.classList.add("dropping"); });
+addEventListener("dragleave", (e) => { if (!e.relatedTarget) document.body.classList.remove("dropping"); });
+addEventListener("drop", (e) => {
+  document.body.classList.remove("dropping");
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  importPictures(e.dataTransfer.files);
+});
+addEventListener("paste", (e) => {
+  if (e.target.closest && e.target.closest("input, textarea")) return;
+  const files = [...(e.clipboardData ? e.clipboardData.files : [])];
+  if (files.length) importPictures(files);
+});
+// Another window (or a display window) added or removed a picture.
+addEventListener("storage", (e) => {
+  if (e.key !== "dotfield:pictures") return;
+  reloadPictures();
+  state = normalize(state);
+  apply();
+  renderSceneGrids();
 });
 
 /* ---------- Theme ---------- */

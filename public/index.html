@@ -83,6 +83,17 @@
       <button class="close-btn" data-close aria-label="閉じる"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </header>
     <div class="field" style="--i:0">
+      <div class="label pic-head">Pictures
+        <div class="seg small" id="picColorSeg">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button class="seg-btn txt" data-v="original">元の色</button>
+          <button class="seg-btn txt" data-v="palette">パレット</button>
+        </div>
+      </div>
+      <div class="scene-grid" id="picGrid"></div>
+      <input type="file" id="picInput" accept="image/*" multiple hidden>
+    </div>
+    <div class="field" style="--i:0">
       <div class="label">Objects</div>
       <div class="scene-grid" data-group="objects"></div>
     </div>
