@@ -113,7 +113,14 @@ function quantise(col, n) {
     }
     for (let k = 0; k < K; k++) if (S[k * 4 + 3]) for (let c = 0; c < 3; c++) C[k * 3 + c] = S[k * 4 + c] / S[k * 4 + 3];
   }
-  return { key, fills: Array.from({ length: K }, (_, k) => rgbStr(C[k * 3], C[k * 3 + 1], C[k * 3 + 2])) };
+  return { key, C };
+}
+
+// Hue rotation in YIQ space, θ in radians.
+function hueRotate(r, g, b, th) {
+  const y = 0.299 * r + 0.587 * g + 0.114 * b, i0 = 0.596 * r - 0.274 * g - 0.322 * b, q0 = 0.211 * r - 0.523 * g + 0.312 * b;
+  const c = cos(th), s = sin(th), i = i0 * c - q0 * s, q = i0 * s + q0 * c;
+  return [y + 0.956 * i + 0.621 * q, y - 0.272 * i - 0.647 * q, y - 1.106 * i + 1.703 * q];
 }
 
 class PictureScene {
@@ -165,9 +172,12 @@ class PictureScene {
       this.ph[q] = rnd() * 6.283;
     }
     // Draw order grouped by colour, so each colour is one path.
-    const { key, fills } = quantise(this.col, this.n);
+    const { key, C } = quantise(this.col, this.n);
     this.key = key;
-    this.fills = fills;
+    this.C = C;
+    this.waves = [];
+    this.nextWave = 1.5;
+    this.sheen = null;
     this.order = Uint32Array.from({ length: this.n }, (_, q) => q).sort((a, b) => key[a] - key[b]);
     // Previews start already assembled.
     this.t = A.thumb ? 3 : 0;
@@ -194,7 +204,8 @@ class PictureScene {
     dt = min(dt, 0.05);
     this.t += dt;
     const s = sound.on ? sound : null;
-    if (s && s.beats !== this.beats) { this.beats = s.beats; this.kick = 1; }
+    let hit = false;
+    if (s && s.beats !== this.beats) { this.beats = s.beats; this.kick = 1; hit = true; }
     this.kick *= exp(-dt * 6);
     // Springs back to the picture; the cursor and clicks push dots aside.
     const P = A.pointer, hov = P && P.active, R = A.thumb ? 0 : max(70, this.p * 9);
@@ -202,9 +213,29 @@ class PictureScene {
     const rip = A.ripples || [];
     const { dx, dy, vx, vy, hx, hy } = this;
     const beatPush = s ? this.kick * 26 * (0.4 + s.bass) : 0;
+    // Left alone, the picture still stirs: every few seconds a soft wave rolls out from a
+    // random spot (more often with sound, one per beat).
+    const W = this.waves;
+    this.nextWave -= dt;
+    if (this.t > 2 && (this.nextWave <= 0 || hit)) {
+      if (W.length > 4) W.shift();
+      W.push({ x: A.w * (0.1 + rnd() * 0.8), y: A.h * (0.1 + rnd() * 0.8), r: 0, life: 1 });
+      this.nextWave = 3.5 + rnd() * 3.5;
+    }
+    for (let i = W.length - 1; i >= 0; i--) {
+      W[i].r += dt * max(A.w, A.h) * 0.32;
+      W[i].life -= dt / 3.2;
+      if (W[i].life <= 0) W.splice(i, 1);
+    }
+    const ww = max(A.w, A.h) * 0.045;
     for (let q = 0; q < this.n; q++) {
       let fx = -60 * dx[q], fy = -60 * dy[q];
       const x = hx[q] + dx[q], y = hy[q] + dy[q];
+      for (let i = 0; i < W.length; i++) {
+        const w = W[i], ex = hx[q] - w.x, ey = hy[q] - w.y, dd = sqrt(ex * ex + ey * ey);
+        const z = (dd - w.r) / ww;
+        if (z > -2 && z < 2 && dd > 0.01) { const e = exp(-z * z) * w.life * 1600; fx += (ex / dd) * e; fy += (ey / dd) * e; }
+      }
       if (hov) {
         const ex = x - P.px, ey = y - P.py, dd = sqrt(ex * ex + ey * ey);
         if (dd < R && dd > 0.01) { const f = (1 - dd / R) ** 2 * 5200; fx += (ex / dd) * f; fy += (ey / dd) * f; }
@@ -235,42 +266,62 @@ class PictureScene {
     const { hx, hy, dx, dy, sx, sy, dl, lum, al, ph, order } = this;
     const fills = palette ? [rgb.a, rgb.b, rgb.c] : null;
     const square = eng && eng.shape === "square";
+    // A band of light sweeps diagonally across every ~11 s; dots inside it swell and brighten.
+    const span = A.w + A.h * 0.6, bw = span * 0.11;
+    const bc = (((t * 0.09) % 1.4) - 0.2) * span;
+    const sheen = this.sheen || (this.sheen = new Float32Array(this.n));
+    for (let q = 0; q < this.n; q++) { const z = (hx[q] + hy[q] * 0.6 - bc) / bw; sheen[q] = z > -2.5 && z < 2.5 ? exp(-z * z) : 0; }
+    // Idle sway: the whole picture ripples gently like a flag.
+    const sw = p * 0.32;
     const draw = (q) => {
       const a = clamp((t - dl[q]) / 1.1, 0, 1), e = ease(a);
-      const x = sx[q] + (hx[q] + dx[q] - sx[q]) * e, y = sy[q] + (hy[q] + dy[q] - sy[q]) * e;
+      const wx = sw * sin(hy[q] * 0.013 + hx[q] * 0.004 + t * 1.1), wy = sw * cos(hx[q] * 0.011 - t * 0.9);
+      const x = sx[q] + (hx[q] + dx[q] + wx - sx[q]) * e, y = sy[q] + (hy[q] + dy[q] + wy - sy[q]) * e;
       // Size from contrast against the background, so the picture reads as halftone.
       let v = clamp(Math.abs(lum[q] - lbg) * 1.15 + 0.14, 0, 1) * al[q];
       // Breathing: a slow wave rolls out from the centre.
       const dc = hypot(hx[q] - cxm, hy[q] - cym);
-      v *= (0.88 + 0.12 * sin(t * 1.3 - dc * 0.012)) * swell;
+      v *= (0.88 + 0.12 * sin(t * 1.3 - dc * 0.012)) * swell * (1 + 0.3 * sheen[q]);
       if (hi > 0.25 && sin(ph[q] + t * 9) > 0.985) v *= 1 + hi;
-      const r = clamp(v, 0, 1.25) * p * 0.48 * (0.35 + 0.65 * e);
+      const r = clamp(v, 0, 1.3) * p * 0.48 * (0.35 + 0.65 * e);
       if (r < 0.2) return;
       if (square) { ctx.rect(x - r, y - r, r * 2, r * 2); return; }
       ctx.moveTo(x + r, y);
       ctx.arc(x, y, r, 0, 6.2832);
     };
     if (palette) {
+      // The sweeping band turns dots to the accent colour.
       for (let g = 0; g < 3; g++) {
         ctx.fillStyle = rgbStr(...fills[g]);
         ctx.beginPath();
-        for (let q = 0; q < this.n; q++) if (this.tone[q] === g) draw(q);
+        for (let q = 0; q < this.n; q++) if ((sheen[q] > 0.45 ? 0 : this.tone[q]) === g) draw(q);
         ctx.fill();
       }
       return;
     }
-    let cur = -1;
-    for (let o = 0; o < order.length; o++) {
-      const q = order[o], key = this.key[q];
-      if (key !== cur) {
-        if (cur !== -1) ctx.fill();
-        cur = key;
-        ctx.fillStyle = this.fills[key];
-        ctx.beginPath();
+    // Colours drift slowly around the hue wheel (about ±30°, nudged on beats); inside the
+    // band they lift toward white.
+    const C = this.C, th = 0.52 * sin(t * 0.21) + (s ? 0.35 * this.kick : 0);
+    const fill = (k, lift) => {
+      const c = hueRotate(C[k * 3], C[k * 3 + 1], C[k * 3 + 2], th);
+      return rgbStr(...c.map((v) => clamp(v + (255 - v) * lift, 0, 255)));
+    };
+    for (const lit of [false, true]) {
+      let cur = -1;
+      for (let o = 0; o < order.length; o++) {
+        const q = order[o];
+        if (sheen[q] > 0.3 !== lit) continue;
+        const key = this.key[q];
+        if (key !== cur) {
+          if (cur !== -1) ctx.fill();
+          cur = key;
+          ctx.fillStyle = fill(key, lit ? 0.38 : 0);
+          ctx.beginPath();
+        }
+        draw(q);
       }
-      draw(q);
+      if (cur !== -1) ctx.fill();
     }
-    if (cur !== -1) ctx.fill();
   }
 }
 
