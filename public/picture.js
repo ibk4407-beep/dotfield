@@ -266,6 +266,10 @@ class PictureScene {
     const { hx, hy, dx, dy, sx, sy, dl, lum, al, ph, order } = this;
     const fills = palette ? [rgb.a, rgb.b, rgb.c] : null;
     const square = eng && eng.shape === "square";
+    // On the GPU when the engine has it; otherwise Canvas 2D paths.
+    const G = eng && eng.dotsGL ? eng.dotsGL() : null;
+    if (G) G.begin(ctx.canvas, k);
+    let color = null;
     // A band of light sweeps diagonally across every ~11 s; dots inside it swell and brighten.
     const span = A.w + A.h * 0.6, bw = span * 0.11;
     const bc = (((t * 0.09) % 1.4) - 0.2) * span;
@@ -285,6 +289,7 @@ class PictureScene {
       if (hi > 0.25 && sin(ph[q] + t * 9) > 0.985) v *= 1 + hi;
       const r = clamp(v, 0, 1.3) * p * 0.48 * (0.35 + 0.65 * e);
       if (r < 0.2) return;
+      if (G) { G.push(x, y, r, color); return; }
       if (square) { ctx.rect(x - r, y - r, r * 2, r * 2); return; }
       ctx.moveTo(x + r, y);
       ctx.arc(x, y, r, 0, 6.2832);
@@ -292,11 +297,12 @@ class PictureScene {
     if (palette) {
       // The sweeping band turns dots to the accent colour.
       for (let g = 0; g < 3; g++) {
-        ctx.fillStyle = rgbStr(...fills[g]);
-        ctx.beginPath();
+        color = fills[g];
+        if (!G) { ctx.fillStyle = rgbStr(...color); ctx.beginPath(); }
         for (let q = 0; q < this.n; q++) if ((sheen[q] > 0.45 ? 0 : this.tone[q]) === g) draw(q);
-        ctx.fill();
+        if (!G) ctx.fill();
       }
+      if (G) G.flush(ctx, rgb.bg, !square);
       return;
     }
     // Colours drift slowly around the hue wheel (about ±30°, nudged on beats); inside the
@@ -304,7 +310,7 @@ class PictureScene {
     const C = this.C, th = 0.52 * sin(t * 0.21) + (s ? 0.35 * this.kick : 0);
     const fill = (k, lift) => {
       const c = hueRotate(C[k * 3], C[k * 3 + 1], C[k * 3 + 2], th);
-      return rgbStr(...c.map((v) => clamp(v + (255 - v) * lift, 0, 255)));
+      return c.map((v) => clamp(v + (255 - v) * lift, 0, 255));
     };
     for (const lit of [false, true]) {
       let cur = -1;
@@ -313,15 +319,16 @@ class PictureScene {
         if (sheen[q] > 0.3 !== lit) continue;
         const key = this.key[q];
         if (key !== cur) {
-          if (cur !== -1) ctx.fill();
+          if (cur !== -1 && !G) ctx.fill();
           cur = key;
-          ctx.fillStyle = fill(key, lit ? 0.38 : 0);
-          ctx.beginPath();
+          color = fill(key, lit ? 0.38 : 0);
+          if (!G) { ctx.fillStyle = rgbStr(...color); ctx.beginPath(); }
         }
         draw(q);
       }
-      if (cur !== -1) ctx.fill();
+      if (cur !== -1 && !G) ctx.fill();
     }
+    if (G) G.flush(ctx, rgb.bg, !square);
   }
 }
 

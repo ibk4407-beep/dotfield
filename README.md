@@ -43,6 +43,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 - `public/` 静的フロントエンド（ビルド不要の ES Modules）
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
+  - `gldots.js` WebGL2 のドット描画（GPU で 1 ドット 1 クアッド。使えない環境や `?gl=0` では Canvas 2D で描く）
   - `objects.js` Objects シーン（パラメトリック曲面）
   - `audio.js` 音声の取得と解析（帯域・スペクトラム・波形・拍検出）
   - `picture.js` Pictures（画像の保存・ドット変換・描画）

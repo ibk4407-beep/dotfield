@@ -2,6 +2,7 @@
 // each pixel to a palette tone, eases dot sizes and moves dots on springs. Free scenes
 // (3D objects, curves) hand the engine positioned dots directly.
 import { buildClockMask } from "./clock.js";
+import { GLDots } from "./gldots.js";
 
 export const hexToRgb = (h) => {
   h = h.replace("#", "");
@@ -137,6 +138,8 @@ export class Engine {
     this.cur = null;
     this.target = null;
     this.A = { cols: 0, rows: 0, w: 0, h: 0, cell: 14, t: 0, pal: {}, rgb: {}, pointer: this.pointer, ripples: this.ripples };
+    this.useGL = !/[?&]gl=0\b/.test(location.search);
+    this.gld = null;
     this.firstFrame = new Promise((r) => (this._ff = r));
     addEventListener("resize", () => this.resize());
     this.resize();
@@ -148,6 +151,14 @@ export class Engine {
     setInterval(() => {
       if (!document.hidden && performance.now() - this.last > 250) this.step(performance.now());
     }, 100);
+  }
+
+  // The GPU dot renderer, or null to draw with Canvas 2D (no WebGL2, lost context, or ?gl=0).
+  dotsGL() {
+    if (!this.useGL) return null;
+    if (!this.gld) this.gld = new GLDots();
+    if (!this.gld.ok) { this.useGL = false; this.gld = null; return null; }
+    return this.gld;
   }
 
   setColors(c, instant = false) {
@@ -376,6 +387,25 @@ export class Engine {
   renderFree(P, dt) {
     const { ctx, cols, rows, cell, cur } = this;
     const circle = this.shape === "circle";
+    const G = this.dotsGL();
+    if (G) {
+      G.begin(this.canvas, this.dpr);
+      if (this.scene.grid !== false) {
+        const s = cell * 0.09, half = cell / 2;
+        for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) G.push(x * cell + half, y * cell + half, s, cur.base);
+      }
+      // Zoom about the centre so the whole picture breathes.
+      const pz = this.pulse, z = pz ? pz.zoom : 1, k = pz ? pz.size : 1, cx = this.w / 2, cy = this.h / 2;
+      const fills = fillsOf(cur);
+      for (let g = 0; g < 5; g++) for (let i = 0; i < P.n; i++) {
+        if (P.t[i] !== g) continue;
+        const h = (P.s[i] / 2) * k;
+        if (h < 0.15) continue;
+        G.push(cx + (P.x[i] - cx) * z, cy + (P.y[i] - cy) * z, h * z, fills[g]);
+      }
+      G.flush(ctx, cur.bg, circle);
+      return;
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (this.scene.grid !== false) {
       // A whisper of the dot grid keeps free scenes part of the same field. It only changes
@@ -515,6 +545,19 @@ export class Engine {
 
     const fills = fillsOf(cur);
     const half = cell / 2, tiny = 1.1 / this.dpr;
+    const G = this.dotsGL();
+    if (G) {
+      G.begin(this.canvas, this.dpr);
+      for (let gI = 0; gI < 5; gI++) {
+        const n = counts[gI], arr = groups[gI], c = fills[gI];
+        for (let q = 0; q < n; q++) {
+          const j = arr[q], x = j % cols, y = (j / cols) | 0;
+          G.push(x * cell + half + OX[j] * cell, y * cell + half + OY[j] * cell, S[j] / 2, c);
+        }
+      }
+      G.flush(ctx, cur.bg, circle);
+      return;
+    }
     for (let gI = 0; gI < 5; gI++) {
       const n = counts[gI];
       if (!n) continue;
