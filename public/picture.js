@@ -133,16 +133,17 @@ class PictureScene {
     const im = imageFor(this.pic);
     if (!im || !A.w) return;
     const iw = im.naturalWidth, ih = im.naturalHeight;
-    const k = min((A.w * 0.92) / iw, (A.h * 0.9) / ih);
+    // Fill the whole view, cropping the overflow evenly (like CSS object-fit: cover).
+    const k = max(A.w / iw, A.h / ih), sw = A.w / k, sh = A.h / k;
     // A little finer than the field's grid, but capped so big screens stay smooth.
-    const p = A.thumb ? A.w / 56 : max(5, A.cell * 0.8, sqrt((iw * k * ih * k) / 14000));
-    const cols = max(2, round((iw * k) / p)), rows = max(2, round((ih * k) / p));
+    const p = A.thumb ? A.w / 56 : max(5, A.cell * 0.8, sqrt((A.w * A.h) / 14000));
+    const cols = max(2, round(A.w / p) + 1), rows = max(2, round(A.h / p) + 1);
     // Let the browser average each cell's pixels.
     const cv = document.createElement("canvas");
     cv.width = cols; cv.height = rows;
     const cx = cv.getContext("2d", { willReadFrequently: true });
     cx.imageSmoothingQuality = "high";
-    cx.drawImage(im, 0, 0, cols, rows);
+    cx.drawImage(im, (iw - sw) / 2, (ih - sh) / 2, sw, sh, 0, 0, cols, rows);
     const d = cx.getImageData(0, 0, cols, rows).data;
     clearBackdrop(d, cols, rows);
 
