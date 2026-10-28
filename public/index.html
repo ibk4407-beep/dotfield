@@ -58,6 +58,9 @@
     <button class="icon-btn" id="btnDisplay" data-tip="ディスプレイ · D" aria-label="ディスプレイ">
       <svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="12" height="9" rx="1.5"/><rect x="15" y="8" width="6.5" height="7" rx="1.2"/><path d="M6 18h5M8.5 14v4"/></svg>
     </button>
+    <button class="icon-btn sound-btn" id="btnSound" data-tip="サウンド連動 · M" aria-label="サウンド連動" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M3 10v4M7 7v10M11 4v16M15 8v8M19 10.5v3"/></svg>
+    </button>
     <button class="icon-btn" id="btnShare" data-tip="共有" aria-label="共有リンク">
       <svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
     </button>
@@ -82,6 +85,10 @@
     <div class="field" style="--i:0">
       <div class="label">Objects</div>
       <div class="scene-grid" data-group="objects"></div>
+    </div>
+    <div class="field" style="--i:0">
+      <div class="label">Sound</div>
+      <div class="scene-grid" data-group="sound"></div>
     </div>
     <div class="field" style="--i:0">
       <div class="label">Motion</div>
@@ -157,6 +164,22 @@
     <div class="field" style="--i:4">
       <label class="label" for="speed">速度<output id="speedOut"></output></label>
       <input type="range" id="speed" min="0.2" max="2.5" step="0.1">
+    </div>
+    <div class="field" style="--i:5">
+      <label class="toggle"><span>サウンド連動</span><input type="checkbox" id="optSound"><i></i></label>
+      <div class="two sound-opts">
+        <div class="seg small" id="soundSrcSeg">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button class="seg-btn txt" data-v="system">PC の音</button>
+          <button class="seg-btn txt" data-v="mic">マイク</button>
+        </div>
+        <div class="seg small sizes" id="reactSeg">
+          <span class="seg-ind" aria-hidden="true"></span>
+          <button class="seg-btn txt" data-v="0.5">弱</button>
+          <button class="seg-btn txt" data-v="1">中</button>
+          <button class="seg-btn txt" data-v="1.6">強</button>
+        </div>
+      </div>
     </div>
     <div class="field" style="--i:5">
       <div class="label">時計</div>

@@ -49,14 +49,14 @@ export class Points {
   }
 }
 
-function drawPointGroups(ctx, P, fills, circle) {
+function drawPointGroups(ctx, P, fills, circle, k = 1) {
   for (let g = 0; g < 5; g++) {
     ctx.fillStyle = rgbStr(fills[g]);
     ctx.beginPath();
     let any = false;
     for (let i = 0; i < P.n; i++) {
       if (P.t[i] !== g) continue;
-      const h = P.s[i] / 2;
+      const h = (P.s[i] / 2) * k;
       if (h < 0.15) continue;
       any = true;
       if (circle) { ctx.moveTo(P.x[i] + h, P.y[i]); ctx.arc(P.x[i], P.y[i], h, 0, 6.2832); }
@@ -117,6 +117,10 @@ export class Engine {
     this.burnin = true;
     this.clk = null;
     this.ripples = [];
+    this.sound = null;
+    this.react = 1;
+    this.pulse = null;
+    this.beatsSeen = 0;
     this.pointer = { x: -999, y: -999, px: -999, py: -999, active: false };
     this.overlayK = 0;
     this.overlayTarget = 0;
@@ -302,7 +306,17 @@ export class Engine {
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
     if (!this.scene) return;
-    const sdt = dt * this.speed;
+    const snd = this.sound;
+    if (snd) snd.update(dt);
+    // With sound connected, scenes that don't listen on their own speed up with loudness,
+    // swell with the bass and pulse on every beat.
+    const R = snd && snd.on && !this.scene.sound ? this.react : 0;
+    this.pulse = R ? { size: 1 + R * (0.3 * snd.bass + 0.3 * snd.beat), zoom: 1 + R * (0.02 * snd.bass + 0.035 * snd.beat), base: R * snd.high } : null;
+    const sdt = dt * this.speed * (R ? 1 + R * (1.1 * snd.level + 0.9 * snd.beat) : 1);
+    if (R && snd.beats !== this.beatsSeen && !this.scene.free) {
+      this.addRipple(this.w * (0.15 + Math.random() * 0.7), this.h * (0.15 + Math.random() * 0.7), Math.min(0.5, 0.3 * R));
+    }
+    if (snd) this.beatsSeen = snd.beats;
     this.t += sdt;
 
     const k = Math.min(1, dt * 5);
@@ -371,7 +385,13 @@ export class Engine {
       }
       ctx.fill();
     }
-    drawPointGroups(ctx, P, fillsOf(cur), circle);
+    const pz = this.pulse;
+    if (pz) {
+      // Zoom about the centre so the whole picture breathes.
+      const z = pz.zoom, d = this.dpr;
+      ctx.setTransform(d * z, 0, 0, d * z, (this.w / 2) * (1 - z) * d, (this.h / 2) * (1 - z) * d);
+    }
+    drawPointGroups(ctx, P, fillsOf(cur), circle, pz ? pz.size : 1);
 
   }
 
@@ -393,7 +413,8 @@ export class Engine {
     const ease = 1 - Math.exp(-dt * 11);
     const K = 70, DAMP = 11, RP = 7;
     const counts = [0, 0, 0, 0, 0];
-    const baseSize = cell * 0.13;
+    const pz = this.pulse;
+    const baseSize = cell * 0.13 * (pz ? 1 + pz.base * 0.9 : 1), sizeK = pz ? pz.size : 1;
 
     for (let y = 0; y < rows; y++) {
       for (let x = 0; x < cols; x++) {
@@ -417,7 +438,7 @@ export class Engine {
         if (a < 0.05 || (dither && a < TH[j])) { tone = T_BASE; target = baseSize * (0.85 + 0.35 * swell); }
         else {
           tone = nearestTone(r, g, b, CA, CB, CC);
-          target = dither ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8));
+          target = (dither ? cell * 0.66 : cell * (0.2 + 0.7 * Math.pow(a, 0.8))) * sizeK;
         }
 
         // Springs: the cursor pushes dots aside, click shockwaves throw them outward.

@@ -6,8 +6,9 @@ PC 向けのドットアニメーション スクリーンセーバー。
 
 ## 機能
 
-- 常駐ドットフィールド 176 シーン
+- 常駐ドットフィールド 185 シーン
   - Objects: Torus / Knot / Möbius / Twist / Gyro / Coil / Blob / Shell / Orb / Chain / Borromean / Horn / Star / Wind / Slinky / Klein / Pearls / Ribbon / Ripple / Morph（陰影つきの 3D 立体をドットで描画）
+  - Sound 9 種: Spectrum / Mirror / Scope / Ring / Donut / Waterfall / Horizon / Burst / Radial（音のスペクトラム・波形・拍から描く。未接続時は穏やかなダミー信号で動く）
   - Motion 30 種: 回転させず、仕組みそのものが動くシーン。反応拡散（Coral / Mitosis / Fingerprint）、波紋（Pond）、セル・オートマトン（Cyclic / Rule / Ant）、砂（Sand）、ゴルトンボード、結晶成長、育つ木（Sapling）、同期するホタル、渋滞（Traffic）、風になびく布（Curtain）、ソート・迷路・スライドパズルの実演、メタボール、ボロノイ、砂鉄、流線、遠景スクロール、心電図、潮、横断歩道、雷雨 ほか
   - Forms 40 種: Umbilic / Cyclide / Boy / Enneper / Helicat / トーラス結び目 / 超公式シェイプ ほか（Objects と同じ描画の曲面）
   - Orbits 19 種: Lorenz / Aizawa / Thomas などのストレンジアトラクタ、Hopf 束、Currents / Vortex / Swarm ほか（奥行きで陰影をつけた 3D 点群）
@@ -15,6 +16,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
   - Op-art 21 種: Riley / Quasi / Contour / Tiles / Weave ほか（細かいピッチのハーフトーン）
   - Studio: Globe / Terrain / Galaxy / Silk / Rings / Moon / Aura / Helix / Harmono（3D に配置したドット、細かいピッチのハーフトーン、隠線処理）
   - Classic: Koi / Swell / Rain / Flow / Life ほか 16 種（各ドットはパレットの 4 色にスナップ、スプリングで反応）
+- サウンド連動: PC の音（画面共有の「システムの音声も共有する」、Chrome / Edge）またはマイクを解析し、全シーンが音量で加速・低音で膨らみ・拍で脈打つ（強さ 弱 / 中 / 強）。音は外部に送らない。サブモニターの表示用ウィンドウにも解析結果を BroadcastChannel で配信
 - レンダリング: ハーフトーン（サイズ）/ ディザ（1-bit）、円 / 四角
 - ライト / ダーク（黒ベースの Liquid Glass）/ 自動
 - スクリーンセーバー（時計 15 種: Light / Orbit / Dot / Serif / Grotesk / Mono / Condensed / Segment / Analog / Railway / Ring / Word / Progress / Binary / Date）。細かいドットで描画し、位置（左下・中央・右下）とサイズ（S/M/L）を選択可能、無操作時の自動起動
@@ -31,6 +33,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
 | T | ライト / ダーク |
 | C | 時計スタイル |
 | S / A / D | 設定 / AI / ディスプレイ |
+| M | サウンド連動 |
 | F | 全画面 |
 | Esc | パネルを閉じる |
 
@@ -39,6 +42,8 @@ PC 向けのドットアニメーション スクリーンセーバー。
 - `public/` 静的フロントエンド（ビルド不要の ES Modules）
   - `engine.js` ドット描画エンジン（トーンスナップ、スプリング、ハーフトーン / ディザ）
   - `objects.js` Objects シーン（パラメトリック曲面）
+  - `audio.js` 音声の取得と解析（帯域・スペクトラム・波形・拍検出）
+  - `sound.js` Sound シーン
   - `motion.js` Motion シーン（シミュレーションと過程）
   - `gallery.js` Forms / Orbits / Lines / Op-art
   - `scenes3d.js` Studio シーン（3D・自由配置のドット）

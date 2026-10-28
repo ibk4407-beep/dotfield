@@ -4,10 +4,12 @@ import { STUDIO, FormulaSurface } from "./scenes3d.js";
 import { OBJECTS } from "./objects.js";
 import { GALLERY } from "./gallery.js";
 import { MOTION } from "./motion.js";
+import { SOUND } from "./sound.js";
+import { sound } from "./audio.js";
 import { compile, CLOCK_STYLES, CLOCK_POS, CLOCK_SIZES, SURFACES } from "./formula.js";
 import { buildClockMask, FACE_FONTS } from "./clock.js";
 
-const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...MOTION, ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
+const CATALOG = [...OBJECTS.map((s) => ({ ...s, group: "objects" })), ...SOUND, ...MOTION, ...GALLERY, ...STUDIO.map((s) => ({ ...s, group: "studio" })), ...CLASSIC.map((s) => ({ ...s, group: "classic" }))];
 const CLOCK_LABELS = { light: "Light", orbit: "Orbit", dot: "Dot", serif: "Serif", grotesk: "Grotesk", mono: "Mono", condensed: "Condensed", seg: "Segment", analog: "Analog", railway: "Railway", ring: "Ring", word: "Word", progress: "Progress", binary: "Binary", full: "Date", off: "Off" };
 
 const PALETTES = {
@@ -22,13 +24,14 @@ const PALETTES = {
 };
 const HEX = /^#[0-9a-f]{6}$/i;
 const IDLES = [0, 1, 3, 5, 10];
+const REACTS = [0.5, 1, 1.6];
 const CLOCKS = [...CLOCK_STYLES, "off"];
 const STORE_KEY = "dotfield:v1";
 const DEFAULTS = {
   scene: "torus", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
   theme: "auto", style: "halftone", shape: "circle", clockStyle: "light", clockPos: "bl", clockSize: "m",
   cell: 14, speed: 1, idle: 3, full: true, interact: true,
-  wake: true, burnin: true, eco: false, customScenes: [],
+  wake: true, burnin: true, eco: false, customScenes: [], react: 1, soundSource: "system",
 };
 const DISPLAY = new URLSearchParams(location.search).has("display");
 
@@ -97,6 +100,8 @@ function normalize(s) {
   n.idle = IDLES.includes(+n.idle) ? +n.idle : 3;
   for (const k of ["full", "interact", "wake", "burnin"]) n[k] = n[k] !== false;
   n.eco = n.eco === true;
+  n.react = REACTS.includes(+n.react) ? +n.react : 1;
+  if (!["system", "mic"].includes(n.soundSource)) n.soundSource = "system";
   n.name = typeof n.name === "string" ? n.name.slice(0, 40) : "";
   delete n.clock;
   return n;
@@ -111,6 +116,7 @@ const save = () => {
 
 let state = normalize(load());
 const engine = new Engine($("#field"));
+engine.sound = sound;
 const mq = matchMedia("(prefers-color-scheme: dark)");
 const isDark = () => state.theme === "dark" || (state.theme === "auto" && mq.matches);
 const viewColors = (c = state.colors) => (isDark() ? toDark(c) : c);
@@ -139,6 +145,7 @@ function apply({ instant = false } = {}) {
   engine.interact = state.interact && !DISPLAY;
   engine.maxFps = state.eco ? 30 : 60;
   engine.burnin = state.burnin;
+  engine.react = state.react;
   engine.clockStyle = state.clockStyle === "off" ? "light" : state.clockStyle;
   engine.clockPos = state.clockPos;
   engine.clockSize = state.clockSize;
@@ -175,6 +182,7 @@ function update(patch, { local = false, ...opts } = {}) {
 }
 mq.addEventListener("change", () => { apply(); renderSwatches(); });
 if (bc) bc.onmessage = (e) => {
+  if (e.data && e.data.type === "audio") { if (DISPLAY) sound.feed(e.data.frame); return; }
   if (e.data && e.data.type === "state") {
     state = normalize(e.data.state);
     apply();
@@ -206,6 +214,7 @@ const bindSeg = (seg, onPick) => seg.addEventListener("click", (e) => {
 });
 
 const clockPosSeg = $("#clockPosSeg"), clockSizeSeg = $("#clockSizeSeg");
+const soundSrcSeg = $("#soundSrcSeg"), reactSeg = $("#reactSeg");
 const themeSeg = $("#themeSeg"), styleSeg = $("#styleSeg"), shapeSeg = $("#shapeSeg"), idleSeg = $("#idleSeg");
 const cellIn = $("#cell"), speedIn = $("#speed");
 const setRangeFill = (el) => el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
@@ -217,6 +226,9 @@ function syncControls() {
   moveSeg(idleSeg, state.idle);
   moveSeg(clockPosSeg, state.clockPos);
   moveSeg(clockSizeSeg, state.clockSize);
+  moveSeg(soundSrcSeg, state.soundSource);
+  moveSeg(reactSeg, state.react);
+  $("#optSound").checked = sound.on;
   cellIn.value = state.cell;
   speedIn.value = state.speed;
   setRangeFill(cellIn);
@@ -238,6 +250,11 @@ bindSeg(styleSeg, (v) => update({ style: v }));
 bindSeg(shapeSeg, (v) => update({ shape: v }));
 bindSeg(idleSeg, (v) => update({ idle: +v }));
 bindSeg(clockPosSeg, (v) => { update({ clockPos: v }); previewClock(); });
+bindSeg(soundSrcSeg, (v) => {
+  update({ soundSource: v });
+  if (sound.on && sound.source && sound.source !== v) startSound();
+});
+bindSeg(reactSeg, (v) => update({ react: +v }));
 bindSeg(clockSizeSeg, (v) => { update({ clockSize: v }); previewClock(); });
 
 let customColors = null;
@@ -547,6 +564,50 @@ async function syncWake() {
 }
 document.addEventListener("visibilitychange", syncWake);
 
+/* ---------- Sound ---------- */
+// The PC's own audio comes in through screen sharing ("share system audio"); the browser asks
+// each time, so it is never switched on without a click.
+const soundBtn = $("#btnSound");
+let soundBusy = false, soundTimer = 0;
+async function startSound() {
+  if (DISPLAY || soundBusy) return;
+  soundBusy = true;
+  try {
+    await sound.start(state.soundSource);
+    toast(state.soundSource === "mic" ? "マイクの音に連動します" : "PC の音に連動します");
+  } catch (e) {
+    const msg = e && e.message === "noaudio" ? "「システムの音声も共有する」をオンにして、画面全体を選んでください"
+      : e && e.message === "unsupported" ? "このブラウザは PC の音に未対応です。設定でマイクを選べます"
+      : e && e.name === "NotAllowedError" ? (state.soundSource === "mic" ? "マイクが許可されませんでした" : "")
+      : "音声を取得できませんでした";
+    if (msg) toast(msg);
+    syncSound(false);
+  } finally {
+    soundBusy = false;
+  }
+}
+const toggleSound = () => (sound.on ? sound.stop() : startSound());
+function syncSound(on) {
+  soundBtn.classList.toggle("active", on);
+  soundBtn.classList.toggle("live", on);
+  soundBtn.setAttribute("aria-pressed", String(on));
+  $("#optSound").checked = on;
+  clearInterval(soundTimer);
+  soundTimer = 0;
+  soundBtn.style.removeProperty("--lv");
+  if (!on) return;
+  soundTimer = setInterval(() => {
+    soundBtn.style.setProperty("--lv", (sound.level * 0.6 + sound.beat * 0.4).toFixed(3));
+    // Display windows can't capture on their own, so they get the analysed frames.
+    if (bc && sound.io) bc.postMessage({ type: "audio", frame: sound.frame() });
+  }, 33);
+}
+sound.onchange = syncSound;
+soundBtn.addEventListener("click", toggleSound);
+$("#optSound").addEventListener("change", (e) => {
+  if (e.target.checked !== sound.on) toggleSound();
+});
+
 /* ---------- Theme ---------- */
 $("#btnTheme").addEventListener("click", () => update({ theme: isDark() ? "light" : "dark" }));
 
@@ -682,6 +743,7 @@ addEventListener("keydown", (e) => {
   else if (k === "s") openPanel("settings");
   else if (k === "a") openPanel("ai");
   else if (k === "d") openPanel("display");
+  else if (k === "m") toggleSound();
   else if (k === "t") update({ theme: isDark() ? "light" : "dark" });
   else if (k === "c") { update({ clockStyle: CLOCKS[(CLOCKS.indexOf(state.clockStyle) + 1) % CLOCKS.length] }); if (state.clockStyle !== "off") previewClock(); }
   else if (e.key === "ArrowRight") stepScene(1);
@@ -855,7 +917,7 @@ async function boot() {
         .then((d) => {
           if (!d || !d.config) return;
           const { formula, ...cfg } = d.config;
-          const patch = { ...cfg, theme: state.theme, customScenes: state.customScenes };
+          const patch = { ...cfg, theme: state.theme, customScenes: state.customScenes, react: state.react, soundSource: state.soundSource };
           if (formula && formula.expr) {
             const entry = { id: newId(), name: formula.name || "Shared", expr: formula.expr, surface: formula.surface || "flat" };
             patch.customScenes = [entry, ...state.customScenes].slice(0, 16);
@@ -888,6 +950,6 @@ async function boot() {
 boot();
 
 window.__dotfield = {
-  engine, enterSaver, exitSaver, openPanel, closePanels,
+  engine, sound, update, enterSaver, exitSaver, openPanel, closePanels,
   get state() { return state; }, get saver() { return saver; }, get idleFor() { return performance.now() - lastActive; }, get thumbs() { return thumbs.size; },
 };

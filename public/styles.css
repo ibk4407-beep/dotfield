@@ -301,6 +301,9 @@ body.ready .dock > :nth-child(9) { animation-delay: 0.66s; }
 .icon-btn:hover { background: var(--surface-soft); color: var(--ink); box-shadow: var(--surface-shadow); }
 .icon-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--surface-shadow); }
 .icon-btn.active svg { color: var(--accent); }
+.sound-btn svg { transition: scale 0.08s linear; }
+.sound-btn.live svg { scale: calc(1 + var(--lv, 0) * 0.28); }
+.sound-opts { margin-top: 10px; }
 .icon-btn:active, .play-btn:active { scale: 0.86; }
 .icon-btn.busy svg { animation: spin 0.9s linear infinite; }
 #btnFull .ic-exit, #dbFull .ic-exit { display: none; }
