@@ -455,6 +455,8 @@ body.fs #btnFull .ic-exit, body.fs #dbFull .ic-exit { display: block; }
   transition: opacity 0.2s, transform 0.35s var(--spring);
 }
 .pic-head { align-items: center; }
+.shuffle-opts { margin-bottom: 10px; }
+.seg.off { opacity: 0.45; }
 .pic-head .seg.small { width: auto; }
 .pic-head .seg.small .seg-btn { flex: none; width: auto; height: 30px; padding-inline: 12px; white-space: nowrap; }
 .add-card .add-face {

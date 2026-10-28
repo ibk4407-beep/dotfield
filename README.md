@@ -19,6 +19,7 @@ PC 向けのドットアニメーション スクリーンセーバー。
   - Studio: Globe / Terrain / Galaxy / Silk / Rings / Moon / Aura / Helix / Harmono（3D に配置したドット、細かいピッチのハーフトーン、隠線処理）
   - Classic: Koi / Swell / Rain / Flow / Life ほか 16 種（各ドットはパレットの 4 色にスナップ、スプリングで反応）
 - サウンド連動: PC の音（画面共有の「システムの音声も共有する」、Chrome / Edge）またはマイクを解析し、全シーンが音量で加速・低音で膨らみ・拍で脈打つ（強さ 弱 / 中 / 強）。音は外部に送らない。サブモニターの表示用ウィンドウにも解析結果を BroadcastChannel で配信
+- 自動切り替え: 設定でシーン / 色（パレット）を 1・3・5・10・30 分ごとにランダムに切り替え（パネルを開いている間は止まる。表示用ウィンドウも追従）
 - レンダリング: ハーフトーン（サイズ）/ ディザ（1-bit）、円 / 四角
 - ライト / ダーク（黒ベースの Liquid Glass）/ 自動
 - スクリーンセーバー（時計 15 種: Light / Orbit / Dot / Serif / Grotesk / Mono / Condensed / Segment / Analog / Railway / Ring / Word / Progress / Binary / Date）。細かいドットで描画し、位置（左下・中央・右下）とサイズ（S/M/L）を選択可能、無操作時の自動起動

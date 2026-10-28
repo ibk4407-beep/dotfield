@@ -26,6 +26,7 @@ const PALETTES = {
 };
 const HEX = /^#[0-9a-f]{6}$/i;
 const IDLES = [0, 1, 3, 5, 10];
+const SHUFFLES = [1, 3, 5, 10, 30];
 const REACTS = [0.5, 1, 1.6];
 const CLOCKS = [...CLOCK_STYLES, "off"];
 const STORE_KEY = "dotfield:v1";
@@ -33,7 +34,7 @@ const DEFAULTS = {
   scene: "torus", palette: "graphite", name: "", colors: strip(PALETTES.graphite),
   theme: "auto", style: "halftone", shape: "circle", clockStyle: "light", clockPos: "bl", clockSize: "m",
   cell: 14, speed: 1, idle: 3, full: true, interact: true,
-  wake: true, burnin: true, eco: false, customScenes: [], react: 1, soundSource: "system", picColor: "original",
+  wake: true, burnin: true, eco: false, customScenes: [], react: 1, soundSource: "system", picColor: "original", shuffleScene: false, shufflePalette: false, shuffleEvery: 5,
 };
 const DISPLAY = new URLSearchParams(location.search).has("display");
 
@@ -101,6 +102,9 @@ function normalize(s) {
   n.cell = Math.min(24, Math.max(10, Math.round(+n.cell) || 14));
   n.speed = Math.min(2.5, Math.max(0.2, +n.speed || 1));
   n.idle = IDLES.includes(+n.idle) ? +n.idle : 3;
+  n.shuffleEvery = SHUFFLES.includes(+n.shuffleEvery) ? +n.shuffleEvery : 5;
+  n.shuffleScene = n.shuffleScene === true;
+  n.shufflePalette = n.shufflePalette === true;
   for (const k of ["full", "interact", "wake", "burnin"]) n[k] = n[k] !== false;
   n.eco = n.eco === true;
   n.react = REACTS.includes(+n.react) ? +n.react : 1;
@@ -221,6 +225,7 @@ const bindSeg = (seg, onPick) => seg.addEventListener("click", (e) => {
 
 const clockPosSeg = $("#clockPosSeg"), clockSizeSeg = $("#clockSizeSeg");
 const soundSrcSeg = $("#soundSrcSeg"), reactSeg = $("#reactSeg"), picColorSeg = $("#picColorSeg");
+const shuffleSeg = $("#shuffleSeg");
 const themeSeg = $("#themeSeg"), styleSeg = $("#styleSeg"), shapeSeg = $("#shapeSeg"), idleSeg = $("#idleSeg");
 const cellIn = $("#cell"), speedIn = $("#speed");
 const setRangeFill = (el) => el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min)) * 100 + "%");
@@ -230,6 +235,10 @@ function syncControls() {
   moveSeg(styleSeg, state.style);
   moveSeg(shapeSeg, state.shape);
   moveSeg(idleSeg, state.idle);
+  moveSeg(shuffleSeg, state.shuffleEvery);
+  $("#optShuffleScene").checked = state.shuffleScene;
+  $("#optShufflePalette").checked = state.shufflePalette;
+  shuffleSeg.classList.toggle("off", !state.shuffleScene && !state.shufflePalette);
   moveSeg(clockPosSeg, state.clockPos);
   moveSeg(clockSizeSeg, state.clockSize);
   moveSeg(soundSrcSeg, state.soundSource);
@@ -256,6 +265,7 @@ bindSeg(themeSeg, (v) => update({ theme: v }));
 bindSeg(styleSeg, (v) => update({ style: v }));
 bindSeg(shapeSeg, (v) => update({ shape: v }));
 bindSeg(idleSeg, (v) => update({ idle: +v }));
+bindSeg(shuffleSeg, (v) => { update({ shuffleEvery: +v }); shuffleAt = 0; });
 bindSeg(clockPosSeg, (v) => { update({ clockPos: v }); previewClock(); });
 bindSeg(soundSrcSeg, (v) => {
   update({ soundSource: v });
@@ -295,7 +305,7 @@ cellIn.addEventListener("input", () => {
   cellTimer = setTimeout(() => update({ cell: +cellIn.value }), 90);
 });
 speedIn.addEventListener("input", () => update({ speed: +speedIn.value }));
-for (const [id, key] of [["optFull", "full"], ["optInteract", "interact"], ["optWake", "wake"], ["optBurnin", "burnin"], ["optEco", "eco"]]) {
+for (const [id, key] of [["optShuffleScene", "shuffleScene"], ["optShufflePalette", "shufflePalette"], ["optFull", "full"], ["optInteract", "interact"], ["optWake", "wake"], ["optBurnin", "burnin"], ["optEco", "eco"]]) {
   $("#" + id).addEventListener("change", (e) => update({ [key]: e.target.checked }));
 }
 $("#btnReset").addEventListener("click", () => {
@@ -669,6 +679,26 @@ addEventListener("storage", (e) => {
   apply();
   renderSceneGrids();
 });
+
+/* ---------- Auto shuffle ---------- */
+// Every few minutes, a random other scene and/or palette. Only the main window decides; display
+// windows follow through the shared state. Nothing changes while a panel is open.
+let shuffleAt = 0;
+const pickOther = (list, cur) => { const l = list.filter((x) => x !== cur); return l[Math.floor(Math.random() * l.length)]; };
+setInterval(() => {
+  if (DISPLAY || (!state.shuffleScene && !state.shufflePalette)) { shuffleAt = 0; return; }
+  const now = Date.now();
+  if (!shuffleAt) shuffleAt = now + state.shuffleEvery * 60000;
+  if (now < shuffleAt || openPanelName) return;
+  shuffleAt = now + state.shuffleEvery * 60000;
+  const patch = {};
+  if (state.shuffleScene) patch.scene = pickOther(allScenes(), state.scene);
+  if (state.shufflePalette) {
+    const k = pickOther(Object.keys(PALETTES), state.palette);
+    Object.assign(patch, { palette: k, colors: strip(PALETTES[k]) });
+  }
+  update(patch);
+}, 1000);
 
 /* ---------- Theme ---------- */
 $("#btnTheme").addEventListener("click", () => update({ theme: isDark() ? "light" : "dark" }));
